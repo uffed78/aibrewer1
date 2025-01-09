@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Brewer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>AI Brewer</h1>
+    <p>Välj din ölstil och generera recept med AI</p>
+  </header>
+  
+  <main>
+    <section id="filters">
+      <h2>Filtrera ölstilar</h2>
+      <label for="category">Kategori:</label>
+      <select id="category"></select>
+
+      <label for="abv-min">ABV (min):</label>
+      <input type="number" id="abv-min" step="0.1" placeholder="Min ABV">
+
+      <label for="abv-max">ABV (max):</label>
+      <input type="number" id="abv-max" step="0.1" placeholder="Max ABV">
+
+      <button id="filter-btn">Filtrera</button>
+    </section>
+
+    <section id="styles">
+      <h2>Filtrerade ölstilar</h2>
+      <ul id="styles-list"></ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
