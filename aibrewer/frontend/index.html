@@ -13,6 +13,7 @@
   </header>
   
   <main>
+    <!-- Befintliga sektioner -->
     <section id="filters">
       <h2>Filtrera ölstilar</h2>
       <label for="category">Kategori:</label>
@@ -31,6 +32,40 @@
       <h2>Filtrerade ölstilar</h2>
       <ul id="styles-list"></ul>
     </section>
+
+    <!-- Ny sektion för ingredienslager -->
+    <section id="inventory">
+      <h2>Ingredienslager</h2>
+      <ul id="inventory-list"></ul>
+    </section>
+
+    <!-- Ny sektion för recept -->
+    <section id="recipes">
+      <h2>Recept</h2>
+      <ul id="recipe-list"></ul>
+    </section>
+
+    <section id="gpt-chat">
+      <h2>Diskutera med GPT</h2>
+      <label>
+        <input type="checkbox" id="include-inventory">
+        Inkludera lagerstatus
+    </label>
+    <label>
+        Recept-ID:
+        <input type="text" id="recipe-id" placeholder="Valfritt">
+    </label>
+    
+      <label>
+        Recept-ID:
+        <input type="text" id="recipe-id" placeholder="Valfritt">
+      </label>
+      <div id="chat-box"></div>
+      <textarea id="user-input" placeholder="Ställ en fråga eller beskriv dina önskemål"></textarea>
+      <button id="send-btn">Skicka</button>
+    </section>
+    
+  
   </main>
 
   <script src="app.js"></script>

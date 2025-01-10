@@ -32,3 +32,18 @@ def generate_recipe_with_gpt(user_prompt):
             return "No content returned from OpenAI."
     except Exception as e:
         return {"error": str(e)}
+
+def continue_gpt_conversation(messages):
+    """
+    Fortsätter konversationen med GPT baserat på givna meddelanden.
+    """
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4",
+            messages=messages
+        )
+        print("GPT Response Object:", response)  # Debugutskrift
+        return response
+    except Exception as e:
+        print("Fel i continue_gpt_conversation:", str(e))
+        return {"error": str(e)}
