@@ -1,8 +1,10 @@
-from flask import Blueprint, jsonify, request
+import os
+from flask import Blueprint, jsonify, request, send_file
 from backend.brewfather_api import get_recipes, get_all_recipes, get_recipe_by_id
 from backend.gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation
 from backend.brewfather_api import get_all_inventory
 from backend.routes.styles import get_all_styles
+from backend.gpt_integration import format_recipe_data
 
 # Create a Blueprint for recipe routes
 recipes_bp = Blueprint('recipes', __name__)
@@ -18,12 +20,36 @@ def recipes():
     return jsonify(data)
 
 @recipes_bp.route('/recipes/all', methods=['GET'])
-def all_recipes():
+def get_all_user_recipes():
     """
-    Endpoint för att hämta alla recept från Brewfather API.
+    Hämta alla recept för användaren med fullständig information och stöd för parametrar.
     """
-    data = get_all_recipes()
-    return jsonify(data)
+    try:
+        from backend.brewfather_api import get_recipes
+
+        # Skapa ett parameterobjekt från inkommande förfrågan
+        filters = {
+            "complete": request.args.get("complete", "True"),  # Standard till True
+            "limit": request.args.get("limit", 50),           # Standard till max 50
+            "start_after": request.args.get("start_after", None),
+            "order_by": request.args.get("order_by", "_id"),  # Standard till _id
+            "order_by_direction": request.args.get("order_by_direction", "asc")  # Standard till stigande ordning
+        }
+
+        # Filtrera bort tomma värden från parametrarna
+        filters = {k: v for k, v in filters.items() if v is not None}
+
+        # Anropa funktionen med parametrarna
+        recipes = get_recipes(filters)
+
+        # Kontrollera och returnera svar
+        if isinstance(recipes, dict) and "error" in recipes:
+            return jsonify(recipes), 400  # Returnera fel om API-anropet misslyckas
+        return jsonify(recipes), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 @recipes_bp.route('/recipes/<recipe_id>', methods=['GET'])
 def recipe_by_id(recipe_id):
@@ -190,5 +216,74 @@ def analyze_recipe():
     except Exception as e:
         print("Fel i analyze_recipe:", str(e))  # Debug
         return jsonify({"error": str(e)}), 500
+
+
+@recipes_bp.route('/recipes/improve', methods=['POST'])
+def improve_recipe():
+    """
+    Endpoint för att förbättra ett recept via GPT.
+    """
+    try:
+        data = request.get_json(force=True)
+        recipe_id = data.get('recipe_id')
+
+        # Hämta receptdata från Brewfather
+        recipe_data = get_recipe_by_id(recipe_id)
+        if not recipe_data or "error" in recipe_data:
+            return jsonify({"error": f"Recept med ID {recipe_id} kunde inte hämtas"}), 404
+
+        # Skapa prompt
+        prompt = (
+            "Hej. Här är ett recept på en öl jag hämtat från Brewfather med Brewfathers API-funktion. "
+            "Det här är bara ett test, så jag undrar om du kan minska mängden basmalt med tio procent och "
+            "sedan ge mig det justerade receptet tillbaka i samma form?\n\n"
+            f"{recipe_data}"
+        )
+
+        # Skicka prompten till GPT
+        messages = [
+            {"role": "system", "content": "Du är en erfaren bryggmästare som ger råd och förbättringar på ölrecept."},
+            {"role": "user", "content": prompt}
+        ]
+        gpt_response = continue_gpt_conversation(messages)
+
+        # Kontrollera GPT:s svar
+        if not gpt_response or "choices" not in gpt_response:
+            return jsonify({"error": "GPT kunde inte generera ett svar."}), 500
+
+        # Extrahera GPT:s svar
+        gpt_content = gpt_response['choices'][0]['message']['content']
+
+        # Spara hela svaret som en fil
+        file_path = os.path.join(os.getcwd(), "improved_recipe.json")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(gpt_content)
+
+        # Returnera trunkerat svar och länk till filen
+        truncated_content = gpt_content[:2000]  # Returnera de första 2000 tecknen för snabb feedback
+        return jsonify({
+            "response": truncated_content,
+            "full_response_file": "/recipes/improve/download"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@recipes_bp.route('/recipes/improve/download', methods=['GET'])
+def download_improved_recipe():
+    """
+    Låt användaren ladda ner hela GPT-svaret som en JSON-fil.
+    """
+    try:
+        file_path = os.path.join(os.getcwd(), "improved_recipe.json")
+        if not os.path.exists(file_path):
+            return jsonify({"error": "Ingen fil att ladda ner."}), 404
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+
 
 
