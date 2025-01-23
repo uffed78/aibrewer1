@@ -1,0 +1,137 @@
+<!-- /frontend/function_c_test_full_filters.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Function C with Full Filters</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #filter-section, #chat-section {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background: #f9f9f9;
+        }
+        #styles-dropdown {
+            width: 100%;
+            max-width: 300px;
+            margin-bottom: 10px;
+        }
+        #messages {
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background: #fff;
+            border-radius: 5px;
+        }
+        .message {
+            margin-bottom: 10px;
+        }
+        .message.user {
+            text-align: right;
+            color: blue;
+        }
+        .message.assistant {
+            text-align: left;
+            color: green;
+        }
+        #message-input {
+            width: calc(100% - 100px);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #send-button {
+            width: 80px;
+            padding: 10px;
+            border: none;
+            background: blue;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #send-button:hover {
+            background: darkblue;
+        }
+    </style>
+    <script>
+        async function filterStyles() {
+            const category = document.getElementById('category').value;
+            const abvMin = parseFloat(document.getElementById('abv_min').value) || 0;
+            const abvMax = parseFloat(document.getElementById('abv_max').value) || 100;
+            const ibuMin = parseFloat(document.getElementById('ibu_min').value) || 0;
+            const ibuMax = parseFloat(document.getElementById('ibu_max').value) || 1000;
+            const srmMin = parseFloat(document.getElementById('srm_min').value) || 0;
+            const srmMax = parseFloat(document.getElementById('srm_max').value) || 100;
+            const ogMin = parseFloat(document.getElementById('og_min').value) || 0;
+            const ogMax = parseFloat(document.getElementById('og_max').value) || 2;
+            const fgMin = parseFloat(document.getElementById('fg_min').value) || 0;
+            const fgMax = parseFloat(document.getElementById('fg_max').value) || 2;
+
+            const filters = {
+                category: category || null,
+                abv_min: abvMin,
+                abv_max: abvMax,
+                ibu_min: ibuMin,
+                ibu_max: ibuMax,
+                srm_min: srmMin,
+                srm_max: srmMax,
+                og_min: ogMin,
+                og_max: ogMax,
+                fg_min: fgMin,
+                fg_max: fgMax,
+            };
+
+            try {
+                const response = await fetch('/function_c/styles/select', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filters }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const dropdown = document.getElementById('styles-dropdown');
+                    dropdown.innerHTML = '<option value="">Select a Style</option>';
+                    data.filtered_styles.forEach(style => {
+                        const option = document.createElement('option');
+                        option.value = style.name;
+                        option.textContent = style.name;
+                        dropdown.appendChild(option);
+                    });
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error filtering styles:', error);
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="filter-section">
+        <h2>Filter Beer Styles</h2>
+        <label>Category: <input type="text" id="category" placeholder="e.g., Amber"></label><br>
+        <label>ABV Min: <input type="number" id="abv_min" min="0" max="100" step="0.1"></label>
+        <label>ABV Max: <input type="number" id="abv_max" min="0" max="100" step="0.1"></label><br>
+        <label>IBU Min: <input type="number" id="ibu_min" min="0" max="1000" step="1"></label>
+        <label>IBU Max: <input type="number" id="ibu_max" min="0" max="1000" step="1"></label><br>
+        <label>SRM Min: <input type="number" id="srm_min" min="0" max="100" step="1"></label>
+        <label>SRM Max: <input type="number" id="srm_max" min="0" max="100" step="1"></label><br>
+        <label>OG Min: <input type="number" id="og_min" min="0" max="2" step="0.001"></label>
+        <label>OG Max: <input type="number" id="og_max" min="0" max="2" step="0.001"></label><br>
+        <label>FG Min: <input type="number" id="fg_min" min="0" max="2" step="0.001"></label>
+        <label>FG Max: <input type="number" id="fg_max" min="0" max="2" step="0.001"></label><br>
+        <button onclick="filterStyles()">Filter Styles</button>
+        <h3>Filtered Styles</h3>
+        <select id="styles-dropdown"></select>
+    </div>
+</body>
+</html>

@@ -112,7 +112,7 @@ def get_recipe_by_id(recipe_id):
 
 def get_all_inventory():
     """
-    Hämtar alla ingredienser från Brewfather API genom paginering.
+    Hämtar alla ingredienser från Brewfather API genom paginering och inkluderar endast objekt med positivt saldo.
     :return: Lista med alla ingredienser eller felmeddelande
     """
     try:
@@ -127,7 +127,11 @@ def get_all_inventory():
 
         for category in categories:
             url = f"{BASE_URL}/inventory/{category}"
-            params = {"limit": 10, "inventory_exists": "true"}
+            params = {
+                "limit": 50,  # Max tillåtna antal per förfrågan
+                "inventory_exists": "true",  # Endast positivt saldo
+                "complete": "true"  # Hämta alla datafält
+            }
             category_items = []
 
             while True:
@@ -146,6 +150,7 @@ def get_all_inventory():
         return all_inventory
     except Exception as e:
         return {"error": str(e)}
+
 
 def get_inventory_item(category, item_id):
     """

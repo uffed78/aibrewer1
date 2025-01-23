@@ -10,6 +10,9 @@ from routes.inventory import inventory_bp
 from routes.recipes import recipes_bp
 from routes.styles import styles_bp
 from routes.frontend import frontend_bp
+from routes.function_a import function_a_bp
+from routes.function_b import function_b_bp
+from routes.function_c import function_c_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -23,6 +26,9 @@ app.register_blueprint(inventory_bp)
 app.register_blueprint(recipes_bp)
 app.register_blueprint(styles_bp)
 app.register_blueprint(frontend_bp)
+app.register_blueprint(function_a_bp, url_prefix='/function_a')
+app.register_blueprint(function_b_bp, url_prefix='/function_b')
+app.register_blueprint(function_c_bp, url_prefix='/function_c')
 
 # Health Check Route
 @app.route('/status', methods=['GET'])
