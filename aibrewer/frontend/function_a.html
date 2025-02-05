@@ -1,212 +1,90 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Apple-Inspired Brewing Assistant</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            color: #333;
-            background-color: #f5f5f7;
-            margin: 0;
-            padding: 0;
-        }
+from flask import Blueprint, jsonify, request, send_from_directory
+from backend.brewfather_api import get_all_inventory
+from backend.gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation, save_recipe_to_file
 
-        .container {
-            max-width: 900px;
-            margin: 50px auto;
-            padding: 20px;
-            background-color: white;
-            border-radius: 12px;
-            box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.1);
-        }
+function_a_bp = Blueprint('function_a', __name__)
 
-        h1, h2 {
-            color: #1d1d1f;
-            font-weight: 600;
-        }
+@function_a_bp.route('/generate-from-inventory', methods=['POST'])
+def generate_from_inventory():
+    try:
+        # Hämta data från användarens val
+        user_selected_ingredients = request.json.get('ingredients', [])
 
-        button {
-            background-color: #007aff;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            font-size: 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
+        if not user_selected_ingredients:
+            return jsonify({"error": "No ingredients selected"}), 400
 
-        button:hover {
-            background-color: #0056b3;
-        }
+        # Skapa GPT-prompt med hela inventariedatan
+        gpt_prompt = (
+            "Du är en expert på öl och BeerXML-recept. Skapa ett BeerXML-recept baserat på användarens ingredienser och önskemål. "
+            "Använd så mycket data som möjligt, inklusive ID från Brewfather för alla ingredienser. "
+            "Receptet ska vara optimerat för Grainfather G30 eller annan angiven bryggutrustning. "
+            f"Här är de valda ingredienserna:\n{user_selected_ingredients}\n"
+        )
 
-        .inventory-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-        }
+        # Debug: Skriv ut prompten
+        print("GPT Prompt:", gpt_prompt)
 
-        .inventory-item input[type="checkbox"] {
-            margin-right: 10px;
-            transform: scale(1.2);
-        }
+        gpt_response = generate_recipe_with_gpt(gpt_prompt)
 
-        #messages {
-            margin-top: 20px;
-            background-color: #f9f9f9;
-            padding: 20px;
-            border-radius: 8px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
+        # Debug: Skriv ut GPT-svaret
+        print("GPT Response:", gpt_response)
 
-        .message {
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-        }
+        if isinstance(gpt_response, dict) and 'error' in gpt_response:
+            return jsonify({"error": gpt_response['error']}), 500
 
-        .message.user {
-            background-color: #e3f2fd;
-            text-align: right;
-        }
+        # Spara innehållet som en fil
+        filename = "generated_recipe.xml"  # Du kan anpassa namnet
+        save_recipe_to_file(filename, gpt_response)
 
-        .message.assistant {
-            background-color: #e8f5e9;
-        }
+        return jsonify({
+            "gpt_response": gpt_response,
+            "download_link": f"http://127.0.0.1:5000/download/{filename}"
+        }), 200
 
-        input[type="text"] {
-            width: calc(100% - 100px);
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-        }
+    except Exception as e:
+        print(f"Error in generate_from_inventory: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-        .input-group {
-            display: flex;
-            margin-top: 20px;
-        }
 
-        .input-group button {
-            margin-left: 10px;
-            flex-shrink: 0;
-        }
+@function_a_bp.route('/continue-discussion', methods=['POST'])
+def continue_discussion():
+    """
+    Fortsätter diskussionen med GPT baserat på användarens tidigare meddelanden.
+    """
+    try:
+        # Ta emot historik av konversationen
+        messages = request.json.get('messages', [])
 
-        @media (max-width: 600px) {
-            input[type="text"] {
-                width: calc(100% - 80px);
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Brewing Assistant</h1>
+        if not messages:
+            return jsonify({"error": "No conversation history provided"}), 400
 
-        <section id="inventory-section">
-            <h2>Inventory</h2>
-            <button onclick="loadInventory()">Load Inventory</button>
-            <div id="inventory-list"></div>
-            <button onclick="generateFromInventory()" style="margin-top: 20px;">Generate Recipe</button>
-        </section>
+        # Debug: Skriv ut konversationshistorik
+        print("Conversation History:", messages)
 
-        <section id="chat-section">
-            <h2>Chat with GPT</h2>
-            <div id="messages"></div>
-            <div class="input-group">
-                <input type="text" id="message-input" placeholder="Write a message...">
-                <button onclick="sendMessage()">Send</button>
-            </div>
-        </section>
-    </div>
+        # Skicka historik till GPT
+        gpt_response = continue_gpt_conversation(messages)
 
-    <script>
-        let messages = [];
+        # Debug: Skriv ut GPT-svaret
+        print("GPT Response:", gpt_response)
 
-        // Load inventory from backend
-        async function loadInventory() {
-            const response = await fetch('http://127.0.0.1:5000/inventory/all');
-            const data = await response.json();
-            const inventoryList = document.getElementById('inventory-list');
-            inventoryList.innerHTML = '';
+        if isinstance(gpt_response, dict) and 'error' in gpt_response:
+            return jsonify({"error": gpt_response['error']}), 500
 
-            Object.entries(data).forEach(([category, items]) => {
-                const categoryTitle = document.createElement('h3');
-                categoryTitle.textContent = category;
-                inventoryList.appendChild(categoryTitle);
+        # Returnera GPT:s svar
+        return jsonify({
+            "gpt_response": gpt_response
+        }), 200
 
-                items.forEach(item => {
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.value = item.name;
-                    checkbox.dataset.fullIngredient = JSON.stringify(item);
+    except Exception as e:
+        print(f"Error in continue_discussion: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-                    const label = document.createElement('label');
-                    label.textContent = `${item.name} (${item.inventory} ${item.unit || ''})`;
 
-                    const itemContainer = document.createElement('div');
-                    itemContainer.className = 'inventory-item';
-                    itemContainer.appendChild(checkbox);
-                    itemContainer.appendChild(label);
-
-                    inventoryList.appendChild(itemContainer);
-                });
-            });
-        }
-
-        // Generate recipe from selected inventory
-        async function generateFromInventory() {
-            const selectedIngredients = Array.from(document.querySelectorAll('#inventory-list input:checked'))
-                .map(checkbox => JSON.parse(checkbox.dataset.fullIngredient));
-
-            const response = await fetch('http://127.0.0.1:5000/function_a/generate-from-inventory', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ingredients: selectedIngredients })
-            });
-
-            const data = await response.json();
-            if (data.download_link) {
-                const downloadLink = document.createElement('a');
-                downloadLink.href = data.download_link;
-                downloadLink.textContent = 'Download Recipe';
-                downloadLink.target = '_blank';
-                document.getElementById('chat-section').appendChild(downloadLink);
-            }
-        }
-
-        // Send chat message to GPT
-        async function sendMessage() {
-            const userInput = document.getElementById('message-input').value;
-            if (!userInput) return;
-
-            addMessage('user', userInput);
-            document.getElementById('message-input').value = '';
-
-            const response = await fetch('http://127.0.0.1:5000/function_a/continue-discussion', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages })
-            });
-
-            const data = await response.json();
-            if (data.gpt_response) {
-                addMessage('assistant', data.gpt_response);
-            }
-        }
-
-        function addMessage(role, content) {
-            messages.push({ role, content });
-            const messagesDiv = document.getElementById('messages');
-            const messageElement = document.createElement('div');
-            messageElement.className = `message ${role}`;
-            messageElement.textContent = content;
-            messagesDiv.appendChild(messageElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-    </script>
-</body>
-</html>
+@function_a_bp.route('/download/<filename>', methods=['GET'])
+def download_file(filename):
+    directory = os.path.join(os.getcwd(), 'data')  # Lokal katalog
+    file_path = os.path.join(directory, filename)
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return {"error": "File not found"}, 404
+    return send_from_directory(directory, filename, as_attachment=True)

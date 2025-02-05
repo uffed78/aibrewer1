@@ -1,0 +1,131 @@
+<?xml version="1.0" ?>
+<? version="1.0" ?>
+<RECIPES>
+    <RECIPE>
+        <NAME>Saison 2024-04-20 Brew</NAME>
+        <VERSION>1</VERSION>
+        <BREWER>ZetaZeroAlfa</BREWER>
+        <BATCH_SIZE>23</BATCH_SIZE>
+        <BOIL_SIZE>27</BOIL_SIZE>
+        <BOIL_TIME>60</BOIL_TIME>
+        <EFFICIENCY>72</EFFICIENCY>
+        <OG>1.052</OG>
+        <FG>1.006</FG>
+        <ABV>6.0</ABV>
+        <EST_ABV>6.0 %</EST_ABV>
+        <IBU>18.7</IBU>
+        <EST_OG>1.052 SG</EST_OG>
+        <EST_FG>1.006 SG</EST_FG>
+        <EST_COLOR>22.1 EBC</EST_COLOR>
+        <CARBONATION>2.4</CARBONATION>
+
+        <EQUIPMENT>
+            <NAME>Grainfather G30</NAME>
+            <BATCH_SIZE>23</BATCH_SIZE>
+            <BOIL_SIZE>27</BOIL_SIZE>
+            <BOIL_TIME>60</BOIL_TIME>
+        </EQUIPMENT>
+
+        <FERMENTABLES>
+            <FERMENTABLE>
+                <NAME>Malteurop Bavarian Pilsen</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Grain</TYPE>
+                <AMOUNT>2.5</AMOUNT>
+                <YIELD>83.9</YIELD>
+                <COLOR>2.2</COLOR>
+                <POTENTIAL>1.039</POTENTIAL>
+                <BF_ID>default-bOtBEgBoW7dYoLAhqjpd6wz3qCtoGV</BF_ID>
+            </FERMENTABLE>
+            <FERMENTABLE>
+                <NAME>Munich Malt</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Grain</TYPE>
+                <AMOUNT>1.2</AMOUNT>
+                <YIELD>72.0</YIELD>
+                <COLOR>10.9</COLOR>
+                <POTENTIAL>1.033</POTENTIAL>
+                <BF_ID>default-si-munich</BF_ID>
+            </FERMENTABLE>
+            <FERMENTABLE>
+                <NAME>Wheat, Torrified</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Grain</TYPE>
+                <AMOUNT>0.8</AMOUNT>
+                <YIELD>76.1</YIELD>
+                <COLOR>2.0</COLOR>
+                <POTENTIAL>1.035</POTENTIAL>
+                <BF_ID>default-4931da6</BF_ID>
+            </FERMENTABLE>
+            <FERMENTABLE>
+                <NAME>Rye Red Crystal</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Grain</TYPE>
+                <AMOUNT>0.5</AMOUNT>
+                <YIELD>65.0</YIELD>
+                <COLOR>138.8</COLOR>
+                <POTENTIAL>1.029</POTENTIAL>
+                <BF_ID>default-si-ryered</BF_ID>
+            </FERMENTABLE>
+        </FERMENTABLES>
+
+        <HOPS>
+            <HOP>
+                <NAME>Polaris</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Pellet</TYPE>
+                <AMOUNT>0.02</AMOUNT>
+                <ALPHA>20.3</ALPHA>
+                <USE>Boil</USE>
+                <TIME>60</TIME>
+                <FORM>Pellet</FORM>
+                <BF_ID>default-ee7be4b0</BF_ID>
+            </HOP>
+            <HOP>
+                <NAME>Saphir</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Pellet</TYPE>
+                <AMOUNT>0.015</AMOUNT>
+                <ALPHA>2.4</ALPHA>
+                <USE>Boil</USE>
+                <TIME>15</TIME>
+                <FORM>Pellet</FORM>
+                <BF_ID>default-1063364f</BF_ID>
+            </HOP>
+            <HOP>
+                <NAME>Spalter Select</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Pellet</TYPE>
+                <AMOUNT>0.01</AMOUNT>
+                <ALPHA>3.2</ALPHA>
+                <USE>Boil</USE>
+                <TIME>0</TIME>
+                <FORM>Pellet</FORM>
+                <BF_ID>default-cce3adc5</BF_ID>
+            </HOP>
+        </HOPS>
+
+        <YEASTS>
+            <YEAST>
+                <NAME>Belle Saison</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Ale</TYPE>
+                <FORM>Dry</FORM>
+                <AMOUNT>1</AMOUNT>
+                <ATTENUATION>89</ATTENUATION>
+                <LABORATORY>Lallemand (LalBrew)</LABORATORY>
+                <BF_ID>default-4554d3</BF_ID>
+            </YEAST>
+        </YEASTS>
+    </RECIPE>
+</RECIPES>
+```
+
+This BeerXML file includes:
+- Complete recipe details
+- All ingredients with their specific IDs
+- Calculated brewing parameters
+- Equipment profile
+- Hop, fermentable, and yeast information
+
+Would you like me to explain any part of the recipe or BeerXML in more detail?

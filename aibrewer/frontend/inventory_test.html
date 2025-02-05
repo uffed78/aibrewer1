@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,18 +10,22 @@
             font-family: Arial, sans-serif;
             margin: 20px;
         }
-        #inventory-section, #chat-section {
+
+        #inventory-section,
+        #chat-section {
             margin-bottom: 20px;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
             background: #f9f9f9;
         }
+
         #chat-container {
             width: 100%;
             max-width: 600px;
             margin: 0 auto;
         }
+
         #messages {
             height: 300px;
             overflow-y: scroll;
@@ -29,24 +34,30 @@
             background: #fff;
             border-radius: 5px;
         }
+
         .message {
             margin-bottom: 10px;
         }
+
         .message.user {
             text-align: right;
             color: blue;
         }
+
         .message.assistant {
             text-align: left;
             color: green;
         }
+
         #message-input {
             width: calc(100% - 100px);
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
         }
-        #send-button {
+
+        #send-button,
+        #generate-beerxml-button {
             width: 80px;
             padding: 10px;
             border: none;
@@ -55,7 +66,9 @@
             border-radius: 5px;
             cursor: pointer;
         }
-        #send-button:hover {
+
+        #send-button:hover,
+        #generate-beerxml-button:hover {
             background: darkblue;
         }
     </style>
@@ -99,39 +112,82 @@
         // Skicka valda ingredienser till backend
         async function generateFromInventory() {
             const selectedIngredients = Array.from(document.querySelectorAll('#inventory-list input:checked'))
-                .map(checkbox => {
-                    const ingredient = JSON.parse(checkbox.dataset.fullIngredient);
-                    return ingredient;
-                });
+                .map(checkbox => JSON.parse(checkbox.dataset.fullIngredient));
 
-            console.log(selectedIngredients);
+            const selectedProfile = document.getElementById('equipment-profile').value;
 
             const response = await fetch('http://127.0.0.1:5000/function_a/generate-from-inventory', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ingredients: selectedIngredients })
+                body: JSON.stringify({
+                    ingredients: selectedIngredients,
+                    profile: selectedProfile
+                })
             });
 
             const data = await response.json();
-            console.log(data.gpt_response);
+            console.log("Style Suggestions Response:", data);
 
-            if (data.gpt_response) {
-                generatedContext = formatGPTResponse(data.gpt_response);
-                addMessage('assistant', generatedContext);
-
-                // Hantera nedladdningslänken från GPT-svaret
-                if (data.download_link) {
-                const downloadLink = document.createElement('a');
-                downloadLink.href = data.download_link;
-                downloadLink.textContent = "Download Recipe";
-                downloadLink.target = '_blank';
-                document.getElementById('chat-section').appendChild(downloadLink);
-            }
-
+            if (data.style_suggestions) {
+                addMessage('assistant', formatGPTResponse(data.style_suggestions));
             } else {
-                addMessage('assistant', 'Error: Could not generate a recipe.');
+                addMessage('assistant', 'Error: Could not generate style suggestions.');
             }
         }
+
+
+        // Generera BeerXML-recept
+        async function generateBeerXML() {
+            const selectedIngredients = Array.from(document.querySelectorAll('#inventory-list input:checked'))
+                .map(checkbox => JSON.parse(checkbox.dataset.fullIngredient));
+
+            const selectedStyle = document.querySelector('#selected-style')?.textContent || "Custom Ale";
+            const selectedProfile = document.getElementById('equipment-profile').value;
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/function_a/generate-beerxml', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ingredients: selectedIngredients,
+                        style: selectedStyle,
+                        profile: selectedProfile,
+                        messages: messages
+                    })
+                });
+
+                const data = await response.json();
+                console.log("DEBUG: BeerXML Response:", data);
+
+                if (data.file_path) {
+                    console.log("DEBUG: BeerXML file found:", data.file_path);
+
+                    // Hämta endast filnamnet, inte hela sökvägen
+                    const fileName = data.file_path.split('/').pop();
+                    const downloadUrl = `http://127.0.0.1:5000/function_a/download/${fileName}`;
+
+                    // Skapa en temporär länk för att ladda ner filen
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } else {
+                    addMessage('assistant', 'Error: Could not generate BeerXML file.');
+                }
+            } catch (error) {
+                console.error("Error generating BeerXML:", error);
+                addMessage('assistant', 'Error: Could not generate BeerXML file.');
+            }
+        }
+
+
+
+
+
+
+
 
         // Formatera GPT-svar för bättre läsbarhet
         function formatGPTResponse(response) {
@@ -162,15 +218,22 @@
             addMessage('user', userInput);
             document.getElementById('message-input').value = '';
 
-            // Skicka hela historiken till backend
+            // Hämta markerade ingredienser
+            const selectedIngredients = Array.from(document.querySelectorAll('#inventory-list input:checked'))
+                .map(checkbox => JSON.parse(checkbox.dataset.fullIngredient));
+
+            // Skicka hela historiken och ingredienser till backend
             const response = await fetch('http://127.0.0.1:5000/function_a/continue-discussion', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages })
+                body: JSON.stringify({
+                    messages,
+                    ingredients: selectedIngredients
+                })
             });
 
             const data = await response.json();
-            console.log(data.gpt_response);
+            console.log("Response from backend:", data);
 
             if (data.gpt_response) {
                 addMessage('assistant', formatGPTResponse(data.gpt_response));
@@ -179,14 +242,36 @@
             }
         }
 
+        function toggleCheckboxes() {
+            const checkboxes = document.querySelectorAll('#inventory-list input[type="checkbox"]');
+            const allChecked = Array.from(checkboxes).every(checkbox => checkbox.checked);
+
+            // Om alla är markerade, avmarkera alla; annars markera alla
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = !allChecked;
+            });
+        }
+
+
+
     </script>
 </head>
+
 <body>
+    <div id="profile-selection">
+        <label for="equipment-profile">Välj bryggverksprofil:</label>
+        <select id="equipment-profile">
+            <option value="Grainfather G30">Grainfather G30</option>
+            <!-- Fler profiler kan läggas till här -->
+        </select>
+    </div>
+
     <div id="inventory-section">
         <h2>Inventory</h2>
         <button onclick="loadInventory()">Load Inventory</button>
+        <button id="toggle-checkboxes" onclick="toggleCheckboxes()">Markera/Avmarkera Alla</button>
         <div id="inventory-list"></div>
-        <button onclick="generateFromInventory()">Generate Recipe</button>
+        <button onclick="generateFromInventory()">Suggest Styles</button>
     </div>
 
     <div id="chat-section">
@@ -195,7 +280,9 @@
         <div>
             <input type="text" id="message-input" placeholder="Write a message...">
             <button id="send-button" onclick="sendMessage()">Send</button>
+            <button id="generate-beerxml-button" onclick="generateBeerXML()">Generate Recipe</button>
         </div>
     </div>
 </body>
+
 </html>
