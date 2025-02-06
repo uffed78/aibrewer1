@@ -51,11 +51,30 @@ def generate_recipe_draft():
         if not selected_style or not user_selected_ingredients:
             return jsonify({"error": "Missing style or ingredients"}), 400
 
-        # Skapa GPT-prompt för att skapa receptstruktur
-        gpt_prompt = f"{get_system_instruction()['content']}\n\n"
-        gpt_prompt += f"Baserat på ölstilen {selected_style} och ingredienserna, skapa en receptstruktur med procentandelar.\n\n"
-        gpt_prompt += f"Ingredienser:\n{user_selected_ingredients}\n\n"
-        gpt_prompt += f"Utrustningsprofil:\n{get_equipment_profile(selected_profile)['xml']}\n"
+        # Ny systemprompt för receptutkast (UTAN BeerXML och detaljerade formler)
+        gpt_prompt = f"""
+        Du är en expert på ölbryggning och receptutveckling.
+
+        Skapa ett receptutkast för en {selected_style} baserat på ingredienserna och utrustningen nedan.
+
+        📌 **Struktur:**
+        - **Malt:** Lista ingredienser med procentandel av den totala maltbasen.
+        - **Humle:** Specificera humlesorter och deras procentandel av totalbitterhet.
+        - **Jäst:** Rekommendera en passande jäst.
+        - **Målprofil:** Ange förväntat OG, FG, ABV, IBU och EBC.
+
+        📌 **Regler:**
+        - Använd **endast procentandelar**, inga absoluta vikter.
+        - IBU bör vara inom stiltypiska ramar.
+        - Välj jäst utifrån ölstilen.
+        - Ge målvärden baserade på en typisk bryggning, men exakta beräkningar sker i backend.
+
+        📌 **Ingredienser:**
+        {user_selected_ingredients}
+
+        📌 **Utrustningsprofil:**
+        {get_equipment_profile(selected_profile)['xml']}
+        """
 
         gpt_response = generate_recipe_with_gpt(gpt_prompt)
 
@@ -66,6 +85,7 @@ def generate_recipe_draft():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 # 3️⃣ Backend räknar ut värden

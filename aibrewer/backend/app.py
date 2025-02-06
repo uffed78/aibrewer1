@@ -13,6 +13,7 @@ from routes.frontend import frontend_bp
 from routes.function_a import function_a_bp
 from routes.function_b import function_b_bp
 from routes.function_c import function_c_bp
+from routes.function_a_v2 import function_a_v2_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -29,6 +30,7 @@ app.register_blueprint(frontend_bp)
 app.register_blueprint(function_a_bp, url_prefix='/function_a')
 app.register_blueprint(function_b_bp, url_prefix='/function_b')
 app.register_blueprint(function_c_bp, url_prefix='/function_c')
+app.register_blueprint(function_a_v2_bp, url_prefix='/function_a_v2')
 
 # Health Check Route
 @app.route('/status', methods=['GET'])
