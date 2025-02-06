@@ -1,105 +1,114 @@
-import os
-from flask import Blueprint, jsonify, request, send_from_directory
-from backend.brewfather_api import get_all_inventory
-from backend.gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation, save_recipe_to_file
-from backend.gpt_integration import get_system_instruction
+from flask import Blueprint, jsonify, request
+from backend.gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation
 from backend.equipment_profiles import get_equipment_profile
-from backend.recipe_calculations import calculate_recipe_values
+from backend.recipe_calculations import (
+    validate_recipe_draft,
+    calculate_ibu,
+    calculate_og,
+    calculate_ebc,
+    generate_beerxml
+)
+from backend.brewfather_api import get_all_inventory
 
 function_a_v2_bp = Blueprint('function_a_v2', __name__)
 
-# 1️⃣ GPT föreslår ölstilar baserat på inventory
+# 1️⃣ GPT Föreslår ölstilar
 @function_a_v2_bp.route('/suggest-styles', methods=['POST'])
 def suggest_styles():
-    try:
-        user_selected_ingredients = request.json.get('ingredients', [])
-        selected_profile = request.json.get('profile', "Grainfather G30")
+    data = request.json
+    ingredients = data.get('ingredients', [])
+    profile = data.get('profile', "Grainfather G30")
+    
+    equipment = get_equipment_profile(profile)
+    gpt_prompt = f"""
+    Föreslå 3-5 ölstilar som kan bryggas med dessa ingredienser:
+    {ingredients}
+    
+    Utrustningsbegränsningar:
+    - Max kokvolym: {equipment['params']['boil_size']}L
+    - Effektivitet: {equipment['params']['efficiency']}%
+    """
+    
+    styles = generate_recipe_with_gpt(gpt_prompt)
+    return jsonify({"styles": styles})
 
-        if not user_selected_ingredients:
-            return jsonify({"error": "No ingredients selected"}), 400
+# 2️⃣ GPT Genererar receptutkast
+@function_a_v2_bp.route('/generate-draft', methods=['POST'])
+def generate_draft():
+    data = request.json
+    style = data.get('style')
+    ingredients = data.get('ingredients', [])
+    profile = data.get('profile', "Grainfather G30")
 
-        # Hämta bryggverksprofil
-        equipment_data = get_equipment_profile(selected_profile)
-        if not equipment_data:
-            return jsonify({"error": "Invalid equipment profile"}), 400
+    gpt_prompt = f"""
+    Skapa ett receptutkast för {style} med:
+    {ingredients}
+    
+    Inkludera:
+    - Maltfördelning i %
+    - Humletyper och tillsättningstider
+    - Jästtyp
+    - Målvärden (OG, FG, IBU, EBC)
+    """
+    
+    draft = generate_recipe_with_gpt(gpt_prompt)
+    return jsonify({"draft": draft})
 
-        # Skapa GPT-prompt
-        gpt_prompt = f"{get_system_instruction()['content']}\n\n"
-        gpt_prompt += f"Baserat på följande ingredienser och utrustningsprofil, föreslå tre till fem ölstilar som kan bryggas.\n\n"
-        gpt_prompt += f"Ingredienser:\n{user_selected_ingredients}\n\n"
-        gpt_prompt += f"Utrustningsprofil:\n{equipment_data['xml']}\n"
-
-        gpt_response = generate_recipe_with_gpt(gpt_prompt)
-
-        if isinstance(gpt_response, dict) and 'error' in gpt_response:
-            return jsonify({"error": gpt_response['error']}), 500
-
-        return jsonify({"style_suggestions": gpt_response}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# 2️⃣ GPT skapar receptstruktur
-@function_a_v2_bp.route('/generate-recipe-draft', methods=['POST'])
-def generate_recipe_draft():
-    try:
-        selected_style = request.json.get('style', "Custom Ale")
-        user_selected_ingredients = request.json.get('ingredients', [])
-        selected_profile = request.json.get('profile', "Grainfather G30")
-
-        if not selected_style or not user_selected_ingredients:
-            return jsonify({"error": "Missing style or ingredients"}), 400
-
-        # Skapa GPT-prompt för att skapa receptstruktur
-        gpt_prompt = f"{get_system_instruction()['content']}\n\n"
-        gpt_prompt += f"Baserat på ölstilen {selected_style} och ingredienserna, skapa en receptstruktur med procentandelar.\n\n"
-        gpt_prompt += f"Ingredienser:\n{user_selected_ingredients}\n\n"
-        gpt_prompt += f"Utrustningsprofil:\n{get_equipment_profile(selected_profile)['xml']}\n"
-
-        gpt_response = generate_recipe_with_gpt(gpt_prompt)
-
-        if isinstance(gpt_response, dict) and 'error' in gpt_response:
-            return jsonify({"error": gpt_response['error']}), 500
-
-        return jsonify({"recipe_draft": gpt_response}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# 3️⃣ Backend räknar ut värden
-@function_a_v2_bp.route('/calculate-recipe', methods=['POST'])
-def calculate_recipe():
-    try:
-        recipe_draft = request.json.get('recipe_draft', {})
-        selected_profile = request.json.get('profile', "Grainfather G30")
-
-        if not recipe_draft:
-            return jsonify({"error": "No recipe draft provided"}), 400
-
-        calculated_values = calculate_recipe_values(recipe_draft, selected_profile)
-
-        return jsonify({"calculated_recipe": calculated_values}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+# 3️⃣ Backend validerar och beräknar
+@function_a_v2_bp.route('/calculate', methods=['POST'])
+def calculate():
+    data = request.json
+    recipe_draft = data.get('draft')
+    profile = data.get('profile', "Grainfather G30")
+    
+    # Validera GPT:s utkast
+    validation_result = validate_recipe_draft(recipe_draft)
+    if not validation_result["valid"]:
+        return jsonify({"error": validation_result["message"]}), 400
+    
+    # Hämta utrustningsdata
+    equipment = get_equipment_profile(profile)
+    
+    # Utför beräkningar
+    calculated = {
+        "og": calculate_og(recipe_draft, equipment),
+        "ibu": calculate_ibu(recipe_draft, equipment),
+        "ebc": calculate_ebc(recipe_draft, equipment),
+        "abv": None  # Beräknas senare
+    }
+    
+    return jsonify({"calculated": calculated})
 
 # 4️⃣ Backend genererar BeerXML
-@function_a_v2_bp.route('/generate-beerxml-v2', methods=['POST'])
-def generate_beerxml_v2():
-    try:
-        calculated_recipe = request.json.get('calculated_recipe', {})
+@function_a_v2_bp.route('/generate-xml', methods=['POST'])
+def generate_xml():
+    data = request.json
+    recipe_draft = data.get('draft')
+    calculated = data.get('calculated')
+    profile = data.get('profile', "Grainfather G30")
+    
+    equipment = get_equipment_profile(profile)
+    
+    beer_xml = generate_beerxml(
+        recipe_draft, 
+        calculated,
+        equipment
+    )
+    
+    return jsonify({"beerxml": beer_xml})
 
-        if not calculated_recipe:
-            return jsonify({"error": "No calculated recipe provided"}), 400
-
-        # Spara filen
-        file_path = os.path.join(os.getcwd(), 'data', 'generated_recipe_v2.xml')
-        save_recipe_to_file(calculated_recipe, file_path)
-
-        return jsonify({"file_path": file_path}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# 5️⃣ Iterativ diskussion med GPT
+@function_a_v2_bp.route('/discuss', methods=['POST'])
+def discuss():
+    data = request.json
+    messages = data.get('messages', [])
+    current_recipe = data.get('recipe')
+    
+    # Lägg till receptdata i konversationen
+    messages.append({
+        "role": "system",
+        "content": f"Aktuellt recept: {current_recipe}"
+    })
+    
+    response = continue_gpt_conversation(messages)
+    return jsonify({"response": response})
