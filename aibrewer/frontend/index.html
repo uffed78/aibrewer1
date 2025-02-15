@@ -1,110 +1,160 @@
-<!-- /frontend/chat_with_gpt.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat with GPT</title>
+    <title>AI Brewer Test</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
+            padding: 20px;
         }
-        #chat-container {
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        #messages {
-            height: 300px;
-            overflow-y: scroll;
-            border: 1px solid #ddd;
+
+        button {
+            margin: 10px 0;
             padding: 10px;
-            background: #fff;
-            border-radius: 5px;
         }
-        .message {
-            margin-bottom: 10px;
-        }
-        .message.user {
-            text-align: right;
-            color: blue;
-        }
-        .message.assistant {
-            text-align: left;
-            color: green;
-        }
-        #message-input {
-            width: calc(100% - 100px);
+
+        pre {
+            background: #f4f4f4;
             padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        #send-button {
-            width: 80px;
-            padding: 10px;
-            border: none;
-            background: blue;
-            color: white;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #send-button:hover {
-            background: darkblue;
         }
     </style>
-    <script>
-        let messages = [];
-
-        // Add a message to the chat
-        function addMessage(role, content) {
-            messages.push({ role, content });
-            const messagesDiv = document.getElementById('messages');
-            const messageElement = document.createElement('div');
-            messageElement.className = `message ${role}`;
-            messageElement.textContent = content;
-            messagesDiv.appendChild(messageElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Scroll to the bottom
-        }
-
-        // Send a message to GPT
-        async function sendMessage() {
-            const userInput = document.getElementById('message-input').value;
-            if (!userInput) return;
-
-            // Add user's message to chat
-            addMessage('user', userInput);
-            document.getElementById('message-input').value = '';
-
-            try {
-                const response = await fetch('/styles/continue-discussion', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages }),
-                });
-
-                const data = await response.json();
-
-                if (response.ok && data.gpt_response) {
-                    addMessage('assistant', data.gpt_response);
-                } else {
-                    addMessage('assistant', 'Error: Unable to get a response.');
-                }
-            } catch (error) {
-                console.error('Error in sending message:', error);
-                addMessage('assistant', 'Error: Something went wrong.');
-            }
-        }
-    </script>
 </head>
+
 <body>
-    <div id="chat-container">
-        <h2>Chat with GPT</h2>
-        <div id="messages"></div>
-        <div>
-            <input type="text" id="message-input" placeholder="Write a message...">
-            <button id="send-button" onclick="sendMessage()">Send</button>
-        </div>
-    </div>
+    <h1>AI Brewer Test</h1>
+
+    <button onclick="fetchInventory()">Hämta Inventory</button>
+    <pre id="inventory"></pre>
+
+    <button onclick="sendInventoryToGPT()">Skicka till GPT</button>
+    <pre id="styles"></pre>
+
+    <select id="styleSelect"></select>
+    <button onclick="generateRecipe()">Generera Recept</button>
+    <pre id="recipe"></pre>
+
+    <input type="text" id="message" placeholder="Skriv en fråga till GPT">
+    <button onclick="discussRecipe()">Diskutera</button>
+    <pre id="discussion"></pre>
+
+    <button onclick="fetchBeerXML()">Hämta BeerXML</button>
+    <pre id="beerxml"></pre>
+
+    <script>
+        async function fetchInventory() {
+            const response = await fetch('http://localhost:5000/function_a_v2/get-inventory');
+            const data = await response.json();
+            document.getElementById('inventory').textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function sendInventoryToGPT() {
+            const response = await fetch('http://localhost:5000/function_a_v2/suggest-styles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ingredients: JSON.parse(document.getElementById('inventory').textContent) })
+            });
+            const data = await response.json();
+            document.getElementById('styles').textContent = JSON.stringify(data.styles, null, 2);
+
+            const styleSelect = document.getElementById('styleSelect');
+            styleSelect.innerHTML = "";
+            data.styles.forEach(style => {
+                let option = document.createElement("option");
+                option.value = style;
+                option.textContent = style;
+                styleSelect.appendChild(option);
+            });
+        }
+
+        async function generateRecipe() {
+            const style = document.getElementById('styleSelect').value;
+            const response = await fetch('http://localhost:5000/function_a_v2/generate-draft', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ style, ingredients: JSON.parse(document.getElementById('inventory').textContent) })
+            });
+            const data = await response.json();
+            document.getElementById('recipe').textContent = JSON.stringify(data.draft, null, 2);
+        }
+
+        async function discussRecipe() {
+            const message = document.getElementById('message').value;
+            const response = await fetch('http://localhost:5000/function_a_v2/discuss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: [{ role: 'user', content: message }],
+                    recipe: JSON.parse(document.getElementById('recipe').textContent)
+                })
+            });
+            const data = await response.json();
+            document.getElementById('discussion').textContent = data.response;
+        }
+
+        // I din frontend JavaScript
+        async function fetchBeerXML() {
+    try {
+        // Hämta draft från recipe pre-elementet
+        const draft = JSON.parse(document.getElementById('recipe').textContent);
+        
+        // Skicka bara draft och använd standardprofilen
+        const response = await fetch('/function_a_v2/generate-xml', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                draft: draft,
+                calculated: {},  // Låt backend beräkna värdena
+                profile: "Grainfather G30"  // Använd standardprofil
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.log("DEBUG: Response from backend:", errorData);
+            throw new Error(errorData.error || 'Failed to generate XML');
+        }
+
+        // Hämta blob från response
+        const blob = await response.blob();
+        
+        // Skapa en URL för bloben
+        const url = window.URL.createObjectURL(blob);
+        
+        // Skapa en temporär länk för nedladdning
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Använd receptnamnet för filnamnet om det finns
+        const recipeName = draft.name ? draft.name.replace(/\s+/g, '_').toLowerCase() : 'recipe';
+        a.download = `${recipeName}.xml`;
+        
+        // Lägg till länken i DOM:en, klicka på den och ta bort den
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Frigör URL:en
+        window.URL.revokeObjectURL(url);
+        
+        // Visa success-meddelande
+        document.getElementById('beerxml').textContent = "BeerXML har laddats ner!";
+    } catch (error) {
+        console.error('Error generating BeerXML:', error);
+        // Visa felmeddelande i UI:t
+        document.getElementById('beerxml').textContent = "Ett fel uppstod: " + error.message;
+    }
+}
+
+
+
+
+
+    </script>
 </body>
+
 </html>

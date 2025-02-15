@@ -1,105 +1,84 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const categorySelect = document.getElementById('category');
-    const filterBtn = document.getElementById('filter-btn');
-    const stylesList = document.getElementById('styles-list');
-    const recipeList = document.getElementById('recipe-list');
-    const chatBox = document.getElementById('chat-box');
-    const userInput = document.getElementById('user-input');
-    const sendBtn = document.getElementById('send-btn');
+async function fetchInventory() {
+    const response = await fetch('http://localhost:5000/function_a_v2/get-inventory');
+    const data = await response.json();
+    const inventoryContainer = document.getElementById('inventory');
+    inventoryContainer.innerHTML = '';
 
-    let messages = []; // Håller reda på GPT-konversationen
-
-    // Hämta kategorier och fyll rullistan
-    fetch('/styles/categories')
-        .then(response => response.json())
-        .then(categories => {
-            categorySelect.innerHTML = '<option value="">Alla kategorier</option>';
-            categories.forEach(category => {
-                const option = document.createElement('option');
-                option.value = category;
-                option.textContent = category;
-                categorySelect.appendChild(option);
-            });
+    // Kategorisera och visa inventariet
+    for (const [category, items] of Object.entries(data)) {
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'bg-white p-4 rounded shadow';
+        categoryDiv.innerHTML = `<h3 class="font-bold mb-2">${category}</h3><ul>`;
+        
+        items.forEach(item => {
+            categoryDiv.innerHTML += `<li>${item.name} - ${item.amount}</li>`;
         });
 
-    // Filtrera ölstilar
-    filterBtn.addEventListener('click', () => {
-        const category = categorySelect.value;
-        const abvMin = document.getElementById('abv-min').value;
-        const abvMax = document.getElementById('abv-max').value;
+        categoryDiv.innerHTML += '</ul>';
+        inventoryContainer.appendChild(categoryDiv);
+    }
+}
 
-        const queryParams = new URLSearchParams();
-        if (category) queryParams.append('category', category);
-        if (abvMin) queryParams.append('abv_min', abvMin);
-        if (abvMax) queryParams.append('abv_max', abvMax);
-
-        fetch(`/styles/filter?${queryParams.toString()}`)
-            .then(response => response.json())
-            .then(styles => {
-                stylesList.innerHTML = '';
-                styles.forEach(style => {
-                    const li = document.createElement('li');
-                    li.textContent = `${style.name} (${style.category}) - ABV: ${style.abvmin}-${style.abvmax}`;
-                    stylesList.appendChild(li);
-                });
-            });
+async function sendInventoryToGPT() {
+    const inventory = JSON.parse(document.getElementById('inventory').textContent || '{}');
+    const response = await fetch('http://localhost:5000/function_a_v2/suggest-styles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingredients: inventory })
     });
+    const data = await response.json();
+    const stylesContainer = document.getElementById('styles');
+    stylesContainer.innerHTML = '';
 
-    // Hämta och visa recept
-    fetch('/recipes')
-        .then(response => response.json())
-        .then(data => {
-            if (data && data.length > 0) {
-                recipeList.innerHTML = ''; // Rensa listan först
-                data.forEach(recipe => {
-                    const li = document.createElement('li');
-                    li.innerHTML = `
-                        <strong>Namn:</strong> ${recipe.name || 'N/A'}<br>
-                        <strong>Typ:</strong> ${recipe.type || 'N/A'}<br>
-                        <strong>Författare:</strong> ${recipe.author || 'Okänd'}<br>
-                        <strong>Stil:</strong> ${recipe.style?.name || 'N/A'}<br>
-                        <strong>Utrustning:</strong> ${recipe.equipment?.name || 'N/A'}
-                    `;
-                    recipeList.appendChild(li);
-                });
-            } else {
-                recipeList.innerHTML = '<p>Inga recept hittades.</p>';
-            }
-        })
-        .catch(error => {
-            recipeList.textContent = `Fel vid hämtning av recept: ${error.message}`;
-        });
-
-    // GPT-diskussion
-    sendBtn.addEventListener('click', () => {
-        const userMessage = userInput.value.trim();
-        if (!userMessage) return;
-    
-        const includeInventory = document.getElementById('include-inventory').checked;
-        const recipeId = document.getElementById('recipe-id').value;
-    
-        // Lägg till användarens meddelande
-        messages.push({ role: "user", content: userMessage });
-    
-        // Skicka konversationen till backend
-        fetch('/chat-with-gpt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages, include_inventory: includeInventory, recipe_id: recipeId })
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.response) {
-                    messages.push({ role: "assistant", content: data.response });
-                    chatBox.innerHTML += `<p><strong>GPT:</strong> ${data.response}</p>`;
-                } else {
-                    chatBox.innerHTML += `<p><strong>Fel:</strong> ${data.error}</p>`;
-                }
-            })
-            .catch(error => {
-                chatBox.innerHTML += `<p><strong>Fel:</strong> ${error.message}</p>`;
-            });
+    data.styles.forEach(style => {
+        const styleButton = document.createElement('button');
+        styleButton.className = 'bg-yellow-500 text-white px-4 py-2 rounded mr-2 mb-2';
+        styleButton.textContent = style;
+        styleButton.onclick = () => selectStyle(style);
+        stylesContainer.appendChild(styleButton);
     });
-    
-    
-});
+}
+
+async function selectStyle(style) {
+    const response = await fetch('http://localhost:5000/function_a_v2/generate-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ style, ingredients: JSON.parse(document.getElementById('inventory').textContent) })
+    });
+    const data = await response.json();
+    const recipeContainer = document.getElementById('recipe');
+    recipeContainer.innerHTML = `<pre>${JSON.stringify(data.draft, null, 2)}</pre>`;
+}
+
+async function discussRecipe() {
+    const message = document.getElementById('message').value;
+    const response = await fetch('http://localhost:5000/function_a_v2/discuss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            messages: [{ role: 'user', content: message }],
+            recipe: JSON.parse(document.getElementById('recipe').textContent)
+        })
+    });
+    const data = await response.json();
+    document.getElementById('discussion').textContent = data.response;
+}
+
+async function fetchBeerXML() {
+    const draft = JSON.parse(document.getElementById('recipe').textContent);
+    const response = await fetch('/function_a_v2/generate-xml', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft, calculated: {}, profile: "Grainfather G30" })
+    });
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${draft.name || 'recipe'}.xml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    document.getElementById('beerxml').textContent = "BeerXML har laddats ner!";
+}
