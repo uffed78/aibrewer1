@@ -49,12 +49,29 @@ def generate_recipe_with_gpt(user_prompt):
         print(f"Error in generate_recipe_with_gpt: {str(e)}")
         return {"error": str(e)}
 
+
+
 def continue_gpt_conversation(messages):
     """
-    Fortsätter konversationen med GPT via OpenRouter.
+    Fortsätter konversationen med GPT via OpenRouter och ser till att kontexten bevaras.
     """
     try:
-        print("Messages sent to GPT:", messages)
+        if not messages:
+            return "Jag har ingen tidigare kontext att fortsätta ifrån."
+
+        # Lägg till en system-prompt för att ge GPT rätt kontext
+        system_prompt = {
+            "role": "system",
+            "content": "Du är en öl-expert och bryggmästare. Användaren har delat sitt inventory, valt en ölstil och fått ett receptförslag. \
+                        Fortsätt samtalet baserat på tidigare meddelanden och hjälp användaren att förbättra receptet."
+        }
+
+        # Se till att systemmeddelandet är med i varje anrop
+        if not any(msg["role"] == "system" for msg in messages):
+            messages.insert(0, system_prompt)
+
+        print("📡 Meddelanden som skickas till GPT:", messages)
+
         response = client.chat.completions.create(
             extra_headers={
                 "HTTP-Referer": "<YOUR_SITE_URL>",
@@ -65,11 +82,12 @@ def continue_gpt_conversation(messages):
             max_tokens=5000,
             temperature=0.7
         )
-        print("GPT Raw Response:", response)
+
+        print("📡 GPT Raw Response:", response)
 
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Error in continue_gpt_conversation: {str(e)}")
+        print(f"❌ Fel i continue_gpt_conversation: {str(e)}")
         return {"error": str(e)}
 
 def send_full_inventory_to_gpt(full_inventory):

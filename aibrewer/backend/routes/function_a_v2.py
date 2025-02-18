@@ -65,10 +65,12 @@ def generate_draft():
     - Maximal kokvolym: {equipment['params']['boil_size']}L
     - Bryggverkets effektivitet: {equipment['params']['efficiency']}%
 
+    Se till att receptförslagen är stiltypiska enligt bjpc 2021.
+
     Svara **endast** med ett JSON-objekt, inget annat. Inkludera följande fält:
     {{
         "name": "Receptnamn",
-        "target_og": 1.054,  
+        "target_og": 1.045,  
         "fermentables": {{
             "Maltnamn": [procent, potential_sg]  
         }},

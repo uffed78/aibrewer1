@@ -3,157 +3,469 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Brewer Test</title>
+    <title>Ölrecept App</title>
     <style>
+        /* Grundläggande styling */
         body {
+            margin: 0;
+            display: flex;
             font-family: Arial, sans-serif;
-            padding: 20px;
+            height: 100vh;
         }
 
-        button {
-            margin: 10px 0;
+        .sidebar {
+            width: 220px;
+            background-color: #f1f1f1;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar button {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px;
             padding: 10px;
+            border: none;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .sidebar button:hover {
+            background-color: #45a049;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        section {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            margin-top: 0;
         }
 
         pre {
-            background: #f4f4f4;
+            background: #f8f8f8;
             padding: 10px;
+            border: 1px solid #ddd;
+            overflow-x: auto;
+        }
+
+        #chatDisplay {
+            border: 1px solid #ccc;
+            height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            background: #fafafa;
         }
     </style>
 </head>
 
 <body>
-    <h1>AI Brewer Test</h1>
+    <div class="sidebar">
+        <button id="getInventoryBtn">Hämta Inventory</button>
+        <button id="suggestStylesBtn">Skicka Inventory till GPT</button>
+        <button id="generateDraftBtn">Generera Draft</button>
+        <button id="generateXmlBtn">Generera BeerXML</button>
+        <button id="discussBtn">Diskutera med GPT</button>
+    </div>
 
-    <button onclick="fetchInventory()">Hämta Inventory</button>
-    <pre id="inventory"></pre>
+    <div class="main-content">
+        <!-- Inventory Section -->
+        <section id="inventorySection">
+            <h2>Inventory</h2>
+            <div id="inventoryDisplay">Klicka på "Hämta Inventory" för att ladda ingredienser.</div>
+        </section>
 
-    <button onclick="sendInventoryToGPT()">Skicka till GPT</button>
-    <pre id="styles"></pre>
+        <!-- Stilförslag Section -->
+        <section id="styleSuggestionsSection" class="hidden">
+            <h2>Stilförslag</h2>
+            <div id="styleSuggestions"></div>
+            <div>
+                <label for="customStyle">Eller ange eget förslag:</label>
+                <input type="text" id="customStyle" placeholder="T.ex. Schwarzbier">
+                <button id="customStyleBtn">Skicka eget förslag</button>
+            </div>
+        </section>
 
-    <select id="styleSelect"></select>
-    <button onclick="generateRecipe()">Generera Recept</button>
-    <pre id="recipe"></pre>
+        <!-- Receptutkast Section -->
+        <section id="draftSection" class="hidden">
+            <h2>Receptutkast</h2>
+            <div id="draftDisplay"></div>
+        </section>
 
-    <input type="text" id="message" placeholder="Skriv en fråga till GPT">
-    <button onclick="discussRecipe()">Diskutera</button>
-    <pre id="discussion"></pre>
-
-    <button onclick="fetchBeerXML()">Hämta BeerXML</button>
-    <pre id="beerxml"></pre>
+        <!-- Chat Section -->
+        <section id="chatSection" class="hidden">
+            <h2>Chatt med GPT</h2>
+            <div id="chatDisplay"></div>
+            <input type="text" id="chatInput" placeholder="Skriv ett meddelande">
+            <button id="sendChatBtn">Skicka</button>
+        </section>
+    </div>
 
     <script>
-        async function fetchInventory() {
-            const response = await fetch('http://localhost:5000/function_a_v2/get-inventory');
-            const data = await response.json();
-            document.getElementById('inventory').textContent = JSON.stringify(data, null, 2);
-        }
+        // Bas-URL för API-anrop, ändra vid behov
+        const baseUrl = 'http://localhost:5001/function_a_v2';
 
-        async function sendInventoryToGPT() {
-            const response = await fetch('http://localhost:5000/function_a_v2/suggest-styles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ingredients: JSON.parse(document.getElementById('inventory').textContent) })
-            });
-            const data = await response.json();
-            document.getElementById('styles').textContent = JSON.stringify(data.styles, null, 2);
+        // Global variabel för att lagra inventory-data
+        let inventoryData = null;
 
-            const styleSelect = document.getElementById('styleSelect');
-            styleSelect.innerHTML = "";
-            data.styles.forEach(style => {
-                let option = document.createElement("option");
-                option.value = style;
-                option.textContent = style;
-                styleSelect.appendChild(option);
-            });
-        }
-
-        async function generateRecipe() {
-            const style = document.getElementById('styleSelect').value;
-            const response = await fetch('http://localhost:5000/function_a_v2/generate-draft', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ style, ingredients: JSON.parse(document.getElementById('inventory').textContent) })
-            });
-            const data = await response.json();
-            document.getElementById('recipe').textContent = JSON.stringify(data.draft, null, 2);
-        }
-
-        async function discussRecipe() {
-            const message = document.getElementById('message').value;
-            const response = await fetch('http://localhost:5000/function_a_v2/discuss', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: [{ role: 'user', content: message }],
-                    recipe: JSON.parse(document.getElementById('recipe').textContent)
-                })
-            });
-            const data = await response.json();
-            document.getElementById('discussion').textContent = data.response;
-        }
-
-        // I din frontend JavaScript
-        async function fetchBeerXML() {
-    try {
-        // Hämta draft från recipe pre-elementet
-        const draft = JSON.parse(document.getElementById('recipe').textContent);
-        
-        // Skicka bara draft och använd standardprofilen
-        const response = await fetch('/function_a_v2/generate-xml', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                draft: draft,
-                calculated: {},  // Låt backend beräkna värdena
-                profile: "Grainfather G30"  // Använd standardprofil
-            })
+        // Hämta inventory
+        document.getElementById('getInventoryBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch(`${baseUrl}/get-inventory`);
+                const data = await response.json();
+                inventoryData = data;
+                displayInventory(data);
+            } catch (error) {
+                console.error('Fel vid hämtning av inventory:', error);
+            }
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.log("DEBUG: Response from backend:", errorData);
-            throw new Error(errorData.error || 'Failed to generate XML');
+        // Visa inventory med grupperade kategorier och checkboxar
+        function displayInventory(data) {
+            console.log("Inventory Data:", data); // Logga API-svaret för felsökning
+            const inventoryDisplay = document.getElementById('inventoryDisplay');
+            inventoryDisplay.innerHTML = '';
+
+            ['fermentables', 'hops', 'yeasts'].forEach(category => {
+                if (data[category] && data[category].length > 0) {
+                    const section = document.createElement('div');
+                    section.classList.add('inventory-category');
+
+                    // Titel och "Markera/Avmarkera alla"-knapp
+                    const header = document.createElement('h3');
+                    header.textContent = category.charAt(0).toUpperCase() + category.slice(1);
+
+                    const toggleAllBtn = document.createElement('button');
+                    toggleAllBtn.textContent = 'Markera alla';
+                    toggleAllBtn.style.marginLeft = '10px';
+                    toggleAllBtn.style.fontSize = '12px';
+                    toggleAllBtn.style.padding = '5px';
+                    toggleAllBtn.dataset.category = category;
+                    toggleAllBtn.onclick = () => toggleAllCheckboxes(category);
+
+                    section.appendChild(header);
+                    section.appendChild(toggleAllBtn);
+
+                    data[category].forEach(item => {
+                        const div = document.createElement('div');
+
+                        // Hämta mängd från "inventory"-fältet
+                        let amountText = 'okänd mängd';
+                        if (item.inventory) {
+                            if (category === 'fermentables') {
+                                amountText = `${item.inventory.toFixed(2)} kg`;
+                            } else if (category === 'hops') {
+                                amountText = `${item.inventory.toFixed(2)} g`;
+                            } else if (category === 'yeasts') {
+                                amountText = `${item.inventory} paket`;
+                            }
+                        }
+
+                        div.innerHTML = `
+                    <input type="checkbox" class="ingredientCheckbox" data-category="${category}" data-name="${item.name}" checked>
+                    ${item.name} - ${amountText}
+                `;
+                        section.appendChild(div);
+                    });
+
+                    inventoryDisplay.appendChild(section);
+                }
+            });
         }
 
-        // Hämta blob från response
-        const blob = await response.blob();
-        
-        // Skapa en URL för bloben
-        const url = window.URL.createObjectURL(blob);
-        
-        // Skapa en temporär länk för nedladdning
-        const a = document.createElement('a');
-        a.href = url;
-        
-        // Använd receptnamnet för filnamnet om det finns
-        const recipeName = draft.name ? draft.name.replace(/\s+/g, '_').toLowerCase() : 'recipe';
-        a.download = `${recipeName}.xml`;
-        
-        // Lägg till länken i DOM:en, klicka på den och ta bort den
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        // Frigör URL:en
-        window.URL.revokeObjectURL(url);
-        
-        // Visa success-meddelande
-        document.getElementById('beerxml').textContent = "BeerXML har laddats ner!";
-    } catch (error) {
-        console.error('Error generating BeerXML:', error);
-        // Visa felmeddelande i UI:t
-        document.getElementById('beerxml').textContent = "Ett fel uppstod: " + error.message;
-    }
-}
+        // Funktion för att markera/avmarkera alla ingredienser i en kategori
+        function toggleAllCheckboxes(category) {
+            const checkboxes = document.querySelectorAll(`.ingredientCheckbox[data-category="${category}"]`);
+            let allChecked = Array.from(checkboxes).every(cb => cb.checked); // Kolla om alla redan är markerade
 
+            checkboxes.forEach(cb => {
+                cb.checked = !allChecked; // Växla status
+            });
 
+            // Uppdatera knappens text
+            const button = document.querySelector(`button[data-category="${category}"]`);
+            button.textContent = allChecked ? 'Markera alla' : 'Avmarkera alla';
+        }
 
+        // Hämta valda ingredienser
+        function getSelectedIngredients() {
+            const checkboxes = document.querySelectorAll('.ingredientCheckbox');
+            const selected = [];
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    selected.push({
+                        category: cb.getAttribute('data-category'),
+                        name: cb.getAttribute('data-name')
+                    });
+                }
+            });
+            return selected;
+        }
 
+        // Skicka inventory till GPT för stilförslag
+        document.getElementById('suggestStylesBtn').addEventListener('click', async () => {
+            const ingredients = getSelectedIngredients();
+            const profile = "Grainfather G30"; // Kan göras dynamiskt
+            try {
+                const response = await fetch(`${baseUrl}/suggest-styles`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ingredients, profile })
+                });
+                const data = await response.json();
+                displayStyleSuggestions(data.styles);
+            } catch (error) {
+                console.error('Fel vid stilförslag:', error);
+            }
+        });
 
+        // Visa stilförslag som knappar
+        function displayStyleSuggestions(responseText) {
+            console.log("Visar GPT:s stilförslag:", responseText);
+
+            const styleSection = document.getElementById('styleSuggestionsSection');
+            styleSection.classList.remove('hidden');
+            const suggestionsDiv = document.getElementById('styleSuggestions');
+            suggestionsDiv.innerHTML = '';
+
+            // Visa hela GPT:s svar så att användaren kan läsa motiveringarna
+            const explanation = document.createElement('p');
+            explanation.innerHTML = `<strong>GPT:s förslag och resonemang:</strong><br>${responseText.replace(/\n/g, "<br>")}`;
+            suggestionsDiv.appendChild(explanation);
+
+            // Försök att extrahera stilnamnen genom att leta efter rader som börjar med en siffra (1. 2. 3.)
+            const styleMatches = responseText.match(/\d+\.\s([^\n]+)/g);
+
+            if (styleMatches) {
+                styleMatches.forEach(match => {
+                    const styleName = match.replace(/^\d+\.\s/, "").trim(); // Ta bort numreringen och behåll namnet
+                    const btn = document.createElement('button');
+                    btn.textContent = styleName;
+                    btn.style.margin = "5px";
+                    btn.addEventListener('click', () => {
+                        generateDraft(styleName);
+                    });
+                    suggestionsDiv.appendChild(btn);
+                });
+            } else {
+                console.warn("Kunde inte extrahera stilnamn automatiskt.");
+            }
+        }
+
+        // Skicka eget stilförslag
+        document.getElementById('customStyleBtn').addEventListener('click', () => {
+            const customStyle = document.getElementById('customStyle').value.trim();
+            if (customStyle) {
+                generateDraft(customStyle);
+            }
+        });
+
+        // Generera receptutkast (draft) baserat på valt stil och ingredienser
+        async function generateDraft(style) {
+            const ingredients = getSelectedIngredients();
+            const profile = "Grainfather G30";
+            try {
+                const response = await fetch(`${baseUrl}/generate-draft`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ style, ingredients, profile })
+                });
+                const data = await response.json();
+                displayDraft(data.draft);
+            } catch (error) {
+                console.error('Fel vid generering av draft:', error);
+            }
+        }
+
+        // Visa receptutkastet
+        function displayDraft(draft) {
+            console.log("Visar receptutkast:", draft);
+
+            const draftSection = document.getElementById('draftSection');
+            draftSection.classList.remove('hidden');
+
+            const draftDisplay = document.getElementById('draftDisplay');
+
+            // 🛠 Spara den kompletta JSON-datan i en dold variabel
+            draftDisplay.dataset.draft = JSON.stringify(draft);
+
+            // 🏷️ Visuell presentation för användaren
+            draftDisplay.innerHTML = `
+        <h2>${draft.name || "Namnlöst recept"}</h2>
+        <p><strong>OG:</strong> ${draft.target_og || "?"} | 
+        <strong>IBU:</strong> ${calculateIBU(draft.hops) || "?"} | 
+        <strong>EBC:</strong> ${calculateEBC(draft.fermentables_metadata) || "?"} | 
+        <strong>ABV:</strong> Beräknas senare</p>
+        <h3>Maltsammansättning</h3>
+        <ul>${Object.entries(draft.fermentables).map(([name, values]) => {
+                const percent = values[0];
+                const metadata = draft.fermentables_metadata[name] || {};
+                return `<li><strong>${name}</strong> (${percent}%) - Färg: ${metadata.srm_color ? metadata.srm_color.toFixed(1) : "?"} SRM - Leverantör: ${metadata.supplier || "Okänd"}</li>`;
+            }).join('')}</ul>
+        <h3>Humle</h3>
+        <ul>${(draft.hops || []).map(hop =>
+                `<li><strong>${hop.name}</strong> - ${hop.alpha}% alpha - ${hop.ibu_contribution} IBU - ${hop.time} min koktid</li>`
+            ).join('')}</ul>
+        <h3>Jäst</h3>
+        <p><strong>${draft.yeast?.type}</strong> - ${draft.yeast?.amount} paket</p>
+    `;
+        }
+
+        // 🔢 Enkla funktioner för att beräkna EBC och IBU om det saknas
+        function calculateEBC(fermentablesMetadata) {
+            let ebcTotal = 0;
+            Object.values(fermentablesMetadata || {}).forEach(malt => {
+                ebcTotal += malt.srm_color || 0;
+            });
+            return ebcTotal > 0 ? Math.round(ebcTotal / Object.keys(fermentablesMetadata).length) : "?";
+        }
+
+        function calculateIBU(hops) {
+            let ibuTotal = 0;
+            (hops || []).forEach(hop => {
+                ibuTotal += hop.ibu_contribution || 0;
+            });
+            return ibuTotal > 0 ? Math.round(ibuTotal) : "?";
+        }
+
+        // Generera BeerXML
+        document.getElementById('generateXmlBtn').addEventListener('click', async () => {
+            console.log("⚡ Försöker generera BeerXML...");
+
+            // ✅ Hämta den kompletta JSON-datan istället för bara det som syns
+            const draftText = document.getElementById('draftDisplay').dataset.draft;
+
+            if (!draftText) {
+                alert("❌ Inget receptutkast att generera BeerXML från.");
+                return;
+            }
+
+            let draft;
+            try {
+                draft = JSON.parse(draftText);
+            } catch (error) {
+                console.error("❌ Fel: Kunde inte tolka draft som JSON.", draftText);
+                return;
+            }
+
+            const calculated = {};  // Placeholder, kan behöva uppdateras om vi lagrar beräkningar
+            const profile = "Grainfather G30";
+
+            // 🛠 Logga exakt vad som skickas till backend
+            const payload = { draft, calculated, profile };
+            console.log("📡 JSON som skickas till backend:", JSON.stringify(payload, null, 2));
+
+            try {
+                const response = await fetch(`${baseUrl}/generate-xml`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                console.log("📡 API-svar från generate-xml:", response);
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = "recipe.xml";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    console.error('❌ Fel vid generering av BeerXML:', response.status, await response.text());
+                }
+            } catch (error) {
+                console.error('❌ Fel vid generering av BeerXML:', error);
+            }
+        });
+
+        // Diskutera med GPT via chatt
+        // Global variabel för att lagra chatthistoriken
+        // Global variabel för att lagra chatthistoriken
+        let chatHistory = [];
+
+        document.getElementById('discussBtn').addEventListener('click', async () => {
+            console.log("⚡ Knapp 'Diskutera med GPT' klickad!");
+
+            const draftText = document.getElementById('draftDisplay').dataset.draft;
+
+            let draft;
+            try {
+                draft = JSON.parse(draftText);
+            } catch (error) {
+                console.error("❌ Kunde inte tolka draft som JSON:", draftText);
+                draft = null;
+            }
+
+            // Om historiken är tom, fyll den med all relevant kontext
+            if (chatHistory.length === 0) {
+                chatHistory.push({ role: "system", content: "Användaren har skickat följande inventory och valt ingredienser." });
+                chatHistory.push({ role: "system", content: "GPT har föreslagit ölstilar och genererat ett receptutkast." });
+                chatHistory.push({ role: "system", content: `Det aktuella receptet: ${JSON.stringify(draft, null, 2)}` });
+            }
+
+            // Fråga användaren vad de vill diskutera
+            const userQuestion = prompt("Vad vill du fråga GPT om receptet?", "Hur kan jag förbättra detta recept?");
+            if (!userQuestion) return;
+
+            // Lägg till användarens faktiska fråga i historiken
+            chatHistory.push({ role: "user", content: userQuestion });
+
+            const payload = { messages: chatHistory, recipe: draft };
+            console.log("📡 Payload som skickas till GPT:", JSON.stringify(payload, null, 2));
+
+            try {
+                console.log("🛠 FULL CHATHISTORIK:", JSON.stringify(chatHistory, null, 2));
+                
+                const response = await fetch(`${baseUrl}/discuss`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                console.log("📡 API-svar från discuss:", response);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log("📡 GPT-svar:", data);
+
+                    // Lägg till GPT:s svar i historiken
+                    chatHistory.push({ role: "assistant", content: data.response });
+
+                    // Visa GPT:s svar på skärmen
+                    alert(`GPT svarade: ${data.response}`);
+                } else {
+                    console.error('❌ Fel vid diskussion med GPT:', response.status, await response.text());
+                }
+            } catch (error) {
+                console.error('❌ Fel vid diskussion med GPT:', error);
+            }
+        });
+
+        // Lägg till ett meddelande i chatten
+        function addChatMessage(sender, text) {
+            const chatDisplay = document.getElementById('chatDisplay');
+            const p = document.createElement('p');
+            p.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            chatDisplay.appendChild(p);
+            chatDisplay.scrollTop = chatDisplay.scrollHeight;
+        }
     </script>
 </body>
 
