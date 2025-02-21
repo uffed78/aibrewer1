@@ -300,16 +300,16 @@
 
             const draftDisplay = document.getElementById('draftDisplay');
 
-            // 🛠 Spara den kompletta JSON-datan i en dold variabel
+            // Spara den kompletta JSON-datan i en dold variabel
             draftDisplay.dataset.draft = JSON.stringify(draft);
 
-            // 🏷️ Visuell presentation för användaren
+            // Använd värden från backend direkt
             draftDisplay.innerHTML = `
         <h2>${draft.name || "Namnlöst recept"}</h2>
         <p><strong>OG:</strong> ${draft.target_og || "?"} | 
-        <strong>IBU:</strong> ${calculateIBU(draft.hops) || "?"} | 
-        <strong>EBC:</strong> ${calculateEBC(draft.fermentables_metadata) || "?"} | 
-        <strong>ABV:</strong> Beräknas senare</p>
+        <strong>IBU:</strong> ${draft.ibu || "?"} | 
+        <strong>EBC:</strong> ${draft.ebc || "?"} | 
+        <strong>ABV:</strong> ${draft.abv || "Beräknas senare"}</p>
         <h3>Maltsammansättning</h3>
         <ul>${Object.entries(draft.fermentables).map(([name, values]) => {
                 const percent = values[0];
@@ -325,22 +325,7 @@
     `;
         }
 
-        // 🔢 Enkla funktioner för att beräkna EBC och IBU om det saknas
-        function calculateEBC(fermentablesMetadata) {
-            let ebcTotal = 0;
-            Object.values(fermentablesMetadata || {}).forEach(malt => {
-                ebcTotal += malt.srm_color || 0;
-            });
-            return ebcTotal > 0 ? Math.round(ebcTotal / Object.keys(fermentablesMetadata).length) : "?";
-        }
 
-        function calculateIBU(hops) {
-            let ibuTotal = 0;
-            (hops || []).forEach(hop => {
-                ibuTotal += hop.ibu_contribution || 0;
-            });
-            return ibuTotal > 0 ? Math.round(ibuTotal) : "?";
-        }
 
         // Generera BeerXML
         document.getElementById('generateXmlBtn').addEventListener('click', async () => {
@@ -432,7 +417,7 @@
 
             try {
                 console.log("🛠 FULL CHATHISTORIK:", JSON.stringify(chatHistory, null, 2));
-                
+
                 const response = await fetch(`${baseUrl}/discuss`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

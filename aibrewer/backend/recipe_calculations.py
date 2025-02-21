@@ -49,38 +49,61 @@ def validate_recipe_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Beräknar OG och maltvikter baserat på målvärden och bryggverkets parametrar.
+    """
     target_og = draft.get("target_og", 1.050)
-    boil_size = equipment["params"]["boil_size"]  # i liter
-    boil_time = equipment["params"]["boil_time"]  # i minuter
-    evap_rate = equipment["params"]["evap_rate"] / 100.0  # t.ex. 7.41% → 0.0741
+    boil_size = equipment["params"]["boil_size"]
+    boil_time = equipment["params"]["boil_time"]
+    evap_rate = equipment["params"]["evap_rate"] / 100.0
     cooling_factor = 0.96
     efficiency = equipment["params"]["efficiency"] / 100.0
+
+    print("\n=== OG Calculation Debug ===")
+    print(f"Target OG: {target_og}")
+    print(f"Boil Size: {boil_size}L")
+    print(f"Boil Time: {boil_time}min")
+    print(f"Evap Rate: {evap_rate * 100}%")
+    print(f"Efficiency: {efficiency * 100}%")
 
     # 1. Beräkna post-boil volume
     boil_off_hours = boil_time / 60.0
     boiled_off = boil_size * evap_rate * boil_off_hours
     post_boil_volume_liters = (boil_size - boiled_off) * cooling_factor
-    post_boil_volume_gallons = post_boil_volume_liters * 0.264172  # liter → gallon
+    post_boil_volume_gallons = post_boil_volume_liters * 0.264172
+
+    print(f"\nVolume Calculations:")
+    print(f"Boil-off: {boiled_off:.2f}L")
+    print(f"Post-boil volume: {post_boil_volume_liters:.2f}L ({post_boil_volume_gallons:.2f} gal)")
 
     # 2. Beräkna required GP
     required_gp = (target_og - 1) * post_boil_volume_gallons * 1000
+    print(f"\nRequired Gravity Points: {required_gp:.1f}")
 
     # 3. Beräkna maltvikt
     fermentables = {}
     total_gp = 0.0
 
+    print("\nMalt Calculations:")
     for malt, (percentage, potential_sg) in draft["fermentables"].items():
-        ppg = (potential_sg - 1) * 1000  # Beräkna PPG
+        ppg = (potential_sg - 1) * 1000
         malt_weight_lbs = (percentage / 100.0) * (required_gp / (ppg * efficiency))
-        malt_weight_kg = malt_weight_lbs / 2.20462  # Konvertera lbs → kg
+        malt_weight_kg = malt_weight_lbs / 2.20462
         fermentables[malt] = round(malt_weight_kg, 2)
-        total_gp += malt_weight_lbs * ppg * efficiency  # Använd lbs för GP-beräkning
+        total_gp += malt_weight_lbs * ppg * efficiency
 
-    # 4. Beräkna OG
-    og = 1 + (total_gp / (post_boil_volume_gallons * 1000))
+        print(f"\n{malt}:")
+        print(f"  Percentage: {percentage}%")
+        print(f"  Potential SG: {potential_sg}")
+        print(f"  PPG: {ppg:.1f}")
+        print(f"  Weight: {malt_weight_kg:.2f}kg ({malt_weight_lbs:.2f}lbs)")
+
+    # 4. Beräkna faktisk OG
+    actual_og = 1 + (total_gp / (post_boil_volume_gallons * 1000))
+    print(f"\nCalculated OG: {actual_og:.3f}")
     
     return {
-        "og": round(og, 3),
+        "og": round(actual_og, 3),
         "fermentables": fermentables
     }
 
@@ -134,19 +157,39 @@ def calculate_ibu(draft: Dict[str, Any], equipment: Dict[str, Any], post_boil_vo
 
 def calculate_ebc(draft: Dict[str, Any], fermentables: Dict[str, float], post_boil_volume: float) -> float:
     """
-    Beräknar EBC med korrekt enhetshantering.
+    Beräknar EBC baserat på maltvikter och färgvärden.
     """
-    post_boil_gallons = post_boil_volume * 0.264172  # Liter → gallon
+    print("\n=== EBC Calculation Debug ===")
+    print(f"Post-boil volume: {post_boil_volume:.2f}L")
+    
+    post_boil_gallons = post_boil_volume * 0.264172
     total_mcu = 0.0
 
+    print("\nMalt Color Calculations:")
     for malt, weight_kg in fermentables.items():
-        lovibond = draft["fermentables"][malt][1]
-        weight_lbs = weight_kg * 2.20462  # kg → lbs
-        mcu = (lovibond * weight_lbs) / post_boil_gallons
+        # Hämta SRM-värde från Brewfather metadata
+        srm_color = draft["fermentables_metadata"][malt].get("color", 0)
+        weight_lbs = weight_kg * 2.20462
+        
+        # Beräkna MCU direkt från SRM (skippar Lovibond-konvertering)
+        mcu = (srm_color * weight_lbs) / post_boil_gallons
         total_mcu += mcu
 
+        print(f"\n{malt}:")
+        print(f"  Weight: {weight_kg:.2f}kg ({weight_lbs:.2f}lbs)")
+        print(f"  Color: {srm_color} SRM")
+        print(f"  MCU contribution: {mcu:.1f}")
+
+    # Beräkna SRM och konvertera till EBC
     srm = 1.49 * (total_mcu ** 0.69)
-    return round(srm * 1.97, 1)  # SRM → EBC
+    ebc = srm * 1.97
+
+    print(f"\nFinal Calculations:")
+    print(f"Total MCU: {total_mcu:.1f}")
+    print(f"Final SRM: {srm:.1f}")
+    print(f"Final EBC: {ebc:.1f}")
+    
+    return round(ebc, 1)
 
 def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipment: Dict[str, Any]) -> str:
     """

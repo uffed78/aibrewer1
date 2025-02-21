@@ -108,12 +108,11 @@ def generate_draft():
             malt_data = fermentables_map.get(malt_name.lower())
             if malt_data:
                 srm_color = malt_data.get("color", 0)
-                lovibond = srm_to_lovibond(srm_color) if srm_color is not None else 0
                 
                 enriched_data["fermentables_metadata"][malt_name] = {
                     "_id": malt_data.get("_id"),
                     "potentialPercentage": malt_data.get("potentialPercentage"),
-                    "color": lovibond,
+                    "color": srm_color,
                     "srm_color": srm_color,
                     "supplier": malt_data.get("supplier"),
                     "origin": malt_data.get("origin"),
@@ -131,9 +130,22 @@ def generate_draft():
 
         # Uppdatera draft_json med den nya strukturen
         draft_json.update(enriched_data)
-        
-        # Fortsätt med humle och jäst som tidigare...
-        # [Resten av koden för humle och jäst är oförändrad]
+
+        # Beräkna post-boil volume
+        post_boil_volume = (equipment["params"]["boil_size"] - 
+                          (equipment["params"]["boil_size"] * 
+                           (equipment["params"]["evap_rate"] / 100.0) * 
+                           (equipment["params"]["boil_time"] / 60.0))) * 0.96
+
+        # Beräkna OG, IBU och EBC
+        og_result = calculate_og(draft_json, equipment)
+        ibu_result = calculate_ibu(draft_json, equipment, post_boil_volume)
+        ebc_result = calculate_ebc(draft_json, og_result["fermentables"], post_boil_volume)
+
+        # Lägg till de beräknade värdena i draft_json
+        draft_json["og"] = og_result["og"]
+        draft_json["ibu"] = ibu_result[0]  # Total IBU
+        draft_json["ebc"] = ebc_result
 
         return jsonify({"draft": draft_json})
         
