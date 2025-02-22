@@ -19,6 +19,7 @@ equipment_profiles = {
             "boil_size": 27.0,
             "boil_time": 60,
             "efficiency": 75,
+            "brewhouse_efficiency": 72,
             "evap_rate": 7.4,
             "trub_loss": 1,
             "deadspace": 3.5

@@ -215,7 +215,7 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
         f'        <BATCH_SIZE>{equipment["params"]["batch_size"]}</BATCH_SIZE>',
         f'        <BOIL_SIZE>{equipment["params"]["boil_size"]}</BOIL_SIZE>',
         f'        <BOIL_TIME>{equipment["params"]["boil_time"]}</BOIL_TIME>',
-        f'        <EFFICIENCY>{equipment["params"]["efficiency"]}</EFFICIENCY>'
+        f'        <EFFICIENCY>{equipment["params"]["brewhouse_efficiency"]}</EFFICIENCY>'
     ]
     
     # Add style information if available
@@ -241,19 +241,16 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
 
     # Add fermentables section
     xml_parts.append('        <FERMENTABLES>')
-    for malt_name, weight in calculated["fermentables"].items():
-        # Hämta original malt data för procent och potential_sg
-        malt_values = draft["fermentables"].get(malt_name, [0, 1.000])
-        # Hämta metadata för malten
+    for malt_name, values in draft["fermentables"].items():
+        percentage = values[0]  # Använd procentandelen från draft
         malt_metadata = draft["fermentables_metadata"].get(malt_name, {})
         
         xml_parts.extend([
             '            <FERMENTABLE>',
-            f'                <BF_ID>{malt_metadata.get("_id", "")}</BF_ID>',
             f'                <NAME>{malt_name}</NAME>',
             f'                <VERSION>1</VERSION>',
             f'                <TYPE>{malt_metadata.get("type", "Grain")}</TYPE>',
-            f'                <AMOUNT>{weight}</AMOUNT>',
+            f'                <AMOUNT>{calculated["fermentables"][malt_name]}</AMOUNT>',  # Använd vikten från calculated
             f'                <YIELD>{malt_metadata.get("potentialPercentage", 75)}</YIELD>',
             f'                <COLOR>{malt_metadata.get("color", 0)}</COLOR>',
             f'                <SUPPLIER>{malt_metadata.get("supplier", "")}</SUPPLIER>',
@@ -262,6 +259,7 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
             '            </FERMENTABLE>'
         ])
     xml_parts.append('        </FERMENTABLES>')
+
 
     # Add hops section with correct mapping
     xml_parts.append('        <HOPS>')
