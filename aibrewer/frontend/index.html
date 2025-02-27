@@ -40,6 +40,8 @@
             flex: 1;
             padding: 20px;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
 
         .hidden {
@@ -63,12 +65,56 @@
             overflow-x: auto;
         }
 
+        #chatContainer {
+            border-top: 2px solid #4CAF50;
+            margin-top: 20px;
+            padding-top: 10px;
+        }
+
         #chatDisplay {
             border: 1px solid #ccc;
             height: 200px;
             overflow-y: auto;
             padding: 10px;
             background: #fafafa;
+            margin-bottom: 10px;
+        }
+        
+        #chatInputContainer {
+            display: flex;
+        }
+        
+        #chatInput {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+        }
+        
+        #sendChatBtn {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        #sendChatBtn:hover {
+            background-color: #45a049;
+        }
+        
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 5px;
+        }
+        
+        .user-message {
+            background-color: #e9f5f9;
+            border-radius: 5px;
+        }
+        
+        .assistant-message {
+            background-color: #f0f0f0;
+            border-radius: 5px;
         }
     </style>
 </head>
@@ -79,7 +125,6 @@
         <button id="suggestStylesBtn">Skicka Inventory till GPT</button>
         <button id="generateDraftBtn">Generera Draft</button>
         <button id="generateXmlBtn">Generera BeerXML</button>
-        <button id="discussBtn">Diskutera med GPT</button>
     </div>
 
     <div class="main-content">
@@ -106,12 +151,14 @@
             <div id="draftDisplay"></div>
         </section>
 
-        <!-- Chat Section -->
-        <section id="chatSection" class="hidden">
-            <h2>Chatt med GPT</h2>
+        <!-- Chat Section - Now always visible -->
+        <section id="chatContainer">
+            <h2>Diskutera med GPT</h2>
             <div id="chatDisplay"></div>
-            <input type="text" id="chatInput" placeholder="Skriv ett meddelande">
-            <button id="sendChatBtn">Skicka</button>
+            <div id="chatInputContainer">
+                <input type="text" id="chatInput" placeholder="Skriv en fråga om receptet...">
+                <button id="sendChatBtn">Skicka</button>
+            </div>
         </section>
     </div>
 
@@ -121,6 +168,9 @@
 
         // Global variabel för att lagra inventory-data
         let inventoryData = null;
+        
+        // Global variabel för att lagra chatthistoriken
+        let chatHistory = [];
 
         // Hämta inventory
         document.getElementById('getInventoryBtn').addEventListener('click', async () => {
@@ -322,10 +372,21 @@
             ).join('')}</ul>
         <h3>Jäst</h3>
         <p><strong>${draft.yeast?.type}</strong> - ${draft.yeast?.amount} paket</p>
+        
+        <!-- Lägg till uppdateringsknapp -->
+        <div class="recipe-actions">
+            <button id="updateRecipeBtn" class="action-button">Uppdatera recept baserat på chatt</button>
+        </div>
     `;
+            
+            // Lägg till event listener för uppdateringsknappen
+            setTimeout(() => {
+                const updateBtn = document.getElementById('updateRecipeBtn');
+                if (updateBtn) {
+                    updateBtn.addEventListener('click', updateRecipeFromChat);
+                }
+            }, 100);
         }
-
-
 
         // Generera BeerXML
         document.getElementById('generateXmlBtn').addEventListener('click', async () => {
@@ -380,76 +441,185 @@
             }
         });
 
-        // Diskutera med GPT via chatt
-        // Global variabel för att lagra chatthistoriken
-        // Global variabel för att lagra chatthistoriken
-        let chatHistory = [];
-
-        document.getElementById('discussBtn').addEventListener('click', async () => {
-            console.log("⚡ Knapp 'Diskutera med GPT' klickad!");
-
+        // Uppdatera recept baserat på chathistorik
+        async function updateRecipeFromChat() {
+            console.log("⚡ Försöker uppdatera receptet baserat på chatthistorik...");
+            
+            // Hämta aktuellt recept
             const draftText = document.getElementById('draftDisplay').dataset.draft;
-
+            if (!draftText) {
+                alert("❌ Inget receptutkast att uppdatera.");
+                return;
+            }
+            
             let draft;
             try {
                 draft = JSON.parse(draftText);
             } catch (error) {
-                console.error("❌ Kunde inte tolka draft som JSON:", draftText);
-                draft = null;
+                console.error("❌ Fel: Kunde inte tolka draft som JSON.", draftText);
+                return;
             }
+            
+            // Visa laddningsmeddelande
+            addChatMessage("System", "Uppdaterar recept baserat på chatt...");
+            
+            try {
+                // Skapa en ny endpoint på backend för receptuppdatering eller använd discuss-endpointen
+                const response = await fetch(`${baseUrl}/discuss`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [
+                            ...chatHistory,
+                            { 
+                                role: "user", 
+                                content: "Baserat på vår diskussion ovan, uppdatera receptet och ge mig ett nytt komplett recept i JSON-format som följer exakt samma format som det nuvarande receptet. Ändra bara de delar vi diskuterat." 
+                            }
+                        ],
+                        recipe: draft
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Försöka extrahera JSON från GPT:s svar
+                    const jsonMatch = data.response.match(/```json\s*([\s\S]*?)\s*```/) || 
+                                     data.response.match(/```\s*([\s\S]*?)\s*```/) ||
+                                     data.response.match(/{[\s\S]*}/);
+                    
+                    if (jsonMatch) {
+                        let newRecipeData;
+                        
+                        try {
+                            // Försök parsa JSON-strängen
+                            newRecipeData = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+                            
+                            // Uppdatera receptet i gränssnittet
+                            displayDraft(newRecipeData);
+                            
+                            // Lägg till ett bekräftelsemeddelande
+                            addChatMessage("System", "✅ Receptet har uppdaterats baserat på diskussionen.");
+                            
+                            // Uppdatera chatthistoriken
+                            chatHistory.push({ role: "user", content: "Uppdatera receptet baserat på vår diskussion." });
+                            chatHistory.push({ role: "assistant", content: data.response });
+                            chatHistory.push({ role: "system", content: "Receptet har uppdaterats." });
+                            
+                        } catch (jsonError) {
+                            console.error("❌ Kunde inte tolka GPT:s svar som JSON:", jsonError);
+                            addChatMessage("System", "❌ Kunde inte uppdatera receptet automatiskt. GPT:s svar hade inte rätt format.");
+                        }
+                    } else {
+                        addChatMessage("System", "❌ Kunde inte hitta JSON-data i GPT:s svar för att uppdatera receptet.");
+                        console.error("Inget JSON-format hittades i GPT:s svar:", data.response);
+                    }
+                } else {
+                    console.error('❌ Fel vid uppdatering av recept:', response.status);
+                    addChatMessage("System", "❌ Ett fel uppstod vid kommunikation med servern.");
+                }
+            } catch (error) {
+                console.error('❌ Fel vid uppdatering av recept:', error);
+                addChatMessage("System", "❌ Ett fel uppstod: " + error.message);
+            }
+        }
 
-            // Om historiken är tom, fyll den med all relevant kontext
-            if (chatHistory.length === 0) {
-                chatHistory.push({ role: "system", content: "Användaren har skickat följande inventory och valt ingredienser." });
-                chatHistory.push({ role: "system", content: "GPT har föreslagit ölstilar och genererat ett receptutkast." });
+        // Initiera chattfunktionalitet så fort sidan laddas
+        document.addEventListener('DOMContentLoaded', function() {
+            // Lägga till en startmeddelande i chatthistoriken
+            addChatMessage("System", "Hej! Jag är din bryggassistent. Ställ frågor om receptet, ingredienser eller bryggning!");
+            
+            // Förbereda chatthistoriken med systeminformation
+            chatHistory = [
+                { role: "system", content: "Du är en AI-assistent som hjälper med ölbryggning. Använd svenska språket i dina svar." }
+            ];
+        });
+
+        // Hantera att skicka chattmeddelanden
+        document.getElementById('sendChatBtn').addEventListener('click', sendChatMessage);
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+
+        async function sendChatMessage() {
+            const chatInput = document.getElementById('chatInput');
+            const userMessage = chatInput.value.trim();
+            
+            if (!userMessage) return;
+            
+            // Rensa input-fältet
+            chatInput.value = '';
+            
+            // Visa användarens meddelande i chatten
+            addChatMessage("Du", userMessage);
+            
+            // Hämta aktuellt recept om ett finns
+            const draftText = document.getElementById('draftDisplay').dataset.draft || null;
+            let draft = null;
+            try {
+                if (draftText) {
+                    draft = JSON.parse(draftText);
+                }
+            } catch (error) {
+                console.error("Kunde inte tolka draft som JSON:", draftText);
+            }
+            
+            // Lägg till användarens meddelande i historiken
+            chatHistory.push({ role: "user", content: userMessage });
+            
+            // Om ett nytt recept finns och det inte finns i historiken, lägg till det
+            if (draft && !chatHistory.some(msg => msg.role === "system" && msg.content.includes("aktuella receptet"))) {
                 chatHistory.push({ role: "system", content: `Det aktuella receptet: ${JSON.stringify(draft, null, 2)}` });
             }
-
-            // Fråga användaren vad de vill diskutera
-            const userQuestion = prompt("Vad vill du fråga GPT om receptet?", "Hur kan jag förbättra detta recept?");
-            if (!userQuestion) return;
-
-            // Lägg till användarens faktiska fråga i historiken
-            chatHistory.push({ role: "user", content: userQuestion });
-
+            
             const payload = { messages: chatHistory, recipe: draft };
-            console.log("📡 Payload som skickas till GPT:", JSON.stringify(payload, null, 2));
-
+            
             try {
-                console.log("🛠 FULL CHATHISTORIK:", JSON.stringify(chatHistory, null, 2));
-
+                // Visa en "loading" indikation
+                const loadingId = addChatMessage("Assistent", "...");
+                
                 const response = await fetch(`${baseUrl}/discuss`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
-                console.log("📡 API-svar från discuss:", response);
-
+                
                 if (response.ok) {
                     const data = await response.json();
-                    console.log("📡 GPT-svar:", data);
-
-                    // Lägg till GPT:s svar i historiken
+                    
+                    // Ta bort loading-meddelandet
+                    document.getElementById(loadingId).remove();
+                    
+                    // Lägg till GPT:s svar i historiken och visa det
                     chatHistory.push({ role: "assistant", content: data.response });
-
-                    // Visa GPT:s svar på skärmen
-                    alert(`GPT svarade: ${data.response}`);
+                    addChatMessage("Assistent", data.response);
                 } else {
-                    console.error('❌ Fel vid diskussion med GPT:', response.status, await response.text());
+                    console.error('Fel vid diskussion med GPT:', response.status);
+                    document.getElementById(loadingId).textContent = "Det uppstod ett fel vid kommunikationen med GPT.";
                 }
             } catch (error) {
-                console.error('❌ Fel vid diskussion med GPT:', error);
+                console.error('Fel vid diskussion med GPT:', error);
+                addChatMessage("System", "Ett fel uppstod. Kunde inte ansluta till GPT.");
             }
-        });
+        }
 
-        // Lägg till ett meddelande i chatten
+        // Lägg till ett meddelande i chatten och returnera elementets ID
         function addChatMessage(sender, text) {
             const chatDisplay = document.getElementById('chatDisplay');
-            const p = document.createElement('p');
-            p.innerHTML = `<strong>${sender}:</strong> ${text}`;
-            chatDisplay.appendChild(p);
+            const messageDiv = document.createElement('div');
+            const messageId = 'chat-msg-' + Date.now();
+            
+            messageDiv.id = messageId;
+            messageDiv.className = 'chat-message ' + 
+                (sender === 'Du' ? 'user-message' : 'assistant-message');
+                
+            messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            chatDisplay.appendChild(messageDiv);
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
+            
+            return messageId;
         }
     </script>
 </body>

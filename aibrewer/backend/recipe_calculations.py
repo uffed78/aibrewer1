@@ -59,48 +59,41 @@ def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, 
     cooling_factor = 0.96
     efficiency = equipment["params"]["efficiency"] / 100.0
 
-    print("\n=== OG Calculation Debug ===")
-    print(f"Target OG: {target_og}")
-    print(f"Boil Size: {boil_size}L")
-    print(f"Boil Time: {boil_time}min")
-    print(f"Evap Rate: {evap_rate * 100}%")
-    print(f"Efficiency: {efficiency * 100}%")
-
     # 1. Beräkna post-boil volume
     boil_off_hours = boil_time / 60.0
     boiled_off = boil_size * evap_rate * boil_off_hours
     post_boil_volume_liters = (boil_size - boiled_off) * cooling_factor
     post_boil_volume_gallons = post_boil_volume_liters * 0.264172
 
-    print(f"\nVolume Calculations:")
-    print(f"Boil-off: {boiled_off:.2f}L")
-    print(f"Post-boil volume: {post_boil_volume_liters:.2f}L ({post_boil_volume_gallons:.2f} gal)")
-
-    # 2. Beräkna required GP
+    # 2. Beräkna required GP (Gravity Points)
     required_gp = (target_og - 1) * post_boil_volume_gallons * 1000
-    print(f"\nRequired Gravity Points: {required_gp:.1f}")
 
-    # 3. Beräkna maltvikt
+    # 3. Beräkna maltvikt med exakt procentandelar
     fermentables = {}
-    total_gp = 0.0
+    total_weight = 0.0
+    temp_weights = {}
 
-    print("\nMalt Calculations:")
+    # Först beräkna preliminära vikter
     for malt, (percentage, potential_sg) in draft["fermentables"].items():
         ppg = (potential_sg - 1) * 1000
         malt_weight_lbs = (percentage / 100.0) * (required_gp / (ppg * efficiency))
-        malt_weight_kg = malt_weight_lbs / 2.20462
-        fermentables[malt] = round(malt_weight_kg, 2)
+        temp_weights[malt] = malt_weight_lbs
+        total_weight += malt_weight_lbs
+
+    # Justera vikterna för att matcha exakta procentandelar
+    for malt, (percentage, _) in draft["fermentables"].items():
+        target_weight = (percentage / 100.0) * total_weight
+        adjusted_weight_kg = (target_weight / 2.20462)  # Convert to kg
+        fermentables[malt] = round(adjusted_weight_kg, 2)
+
+    # 4. Beräkna faktisk OG baserat på justerade vikter
+    total_gp = 0.0
+    for malt, (_, potential_sg) in draft["fermentables"].items():
+        ppg = (potential_sg - 1) * 1000
+        malt_weight_lbs = fermentables[malt] * 2.20462  # Convert kg to lbs
         total_gp += malt_weight_lbs * ppg * efficiency
 
-        print(f"\n{malt}:")
-        print(f"  Percentage: {percentage}%")
-        print(f"  Potential SG: {potential_sg}")
-        print(f"  PPG: {ppg:.1f}")
-        print(f"  Weight: {malt_weight_kg:.2f}kg ({malt_weight_lbs:.2f}lbs)")
-
-    # 4. Beräkna faktisk OG
     actual_og = 1 + (total_gp / (post_boil_volume_gallons * 1000))
-    print(f"\nCalculated OG: {actual_og:.3f}")
     
     return {
         "og": round(actual_og, 3),

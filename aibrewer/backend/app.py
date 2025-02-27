@@ -13,7 +13,7 @@ from routes.function_c import function_c_bp
 from routes.function_a_v2 import function_a_v2_bp
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Öka serverns timeout och maxstorlek på begäran
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False  # För att förbättra prestanda på JSON-svar
