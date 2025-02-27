@@ -1,5 +1,22 @@
-openai
-requests
-python-dotenv
-Flask
+# Web Framework
+Flask>=2.0.1
 flask-cors>=3.0.10
+
+# HTTP and API 
+requests>=2.28.1
+
+# Environment Variables
+python-dotenv>=0.21.0
+
+# AI Integration
+openai>=1.0.0
+
+# Additional dependencies
+Werkzeug>=2.0.0
+MarkupSafe>=2.0.0
+itsdangerous>=2.0.0
+Jinja2>=3.0.0
+
+# Development tools (optional)
+# pytest>=7.0.0
+# black>=22.0.0
