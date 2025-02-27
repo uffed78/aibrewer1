@@ -52,17 +52,28 @@ def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, 
     """
     Beräknar OG och maltvikter baserat på målvärden och bryggverkets parametrar.
     """
+    # Debug equipment parameters
+    print(f"DEBUG Equipment params: boil_size={equipment.get('params', {}).get('boil_size', 'N/A')}, " 
+          f"evap_rate={equipment.get('params', {}).get('evap_rate', 'N/A')}, "
+          f"boil_time={equipment.get('params', {}).get('boil_time', 'N/A')}, "
+          f"efficiency={equipment.get('params', {}).get('efficiency', 'N/A')}")
+          
+    # Debug malt info
+    print("DEBUG Malt info:")
+    for malt, (percentage, potential_sg) in draft.get("fermentables", {}).items():
+        print(f"  - {malt}: {percentage}%, SG={potential_sg}")
+    
     target_og = draft.get("target_og", 1.050)
-    boil_size = equipment["params"]["boil_size"]
-    boil_time = equipment["params"]["boil_time"]
-    evap_rate = equipment["params"]["evap_rate"] / 100.0
+    boil_size = max(0.001, equipment.get('params', {}).get('boil_size', 20))
+    evap_rate = max(0, min(100, equipment.get('params', {}).get('evap_rate', 10))) / 100.0
+    boil_time = max(0.1, equipment.get('params', {}).get('boil_time', 60))
     cooling_factor = 0.96
-    efficiency = equipment["params"]["efficiency"] / 100.0
+    efficiency = max(0.01, equipment.get("params", {}).get("efficiency", 75) / 100.0)
 
     # 1. Beräkna post-boil volume
     boil_off_hours = boil_time / 60.0
     boiled_off = boil_size * evap_rate * boil_off_hours
-    post_boil_volume_liters = (boil_size - boiled_off) * cooling_factor
+    post_boil_volume_liters = max(0.001, (boil_size - boiled_off) * cooling_factor)
     post_boil_volume_gallons = post_boil_volume_liters * 0.264172
 
     # 2. Beräkna required GP (Gravity Points)
@@ -75,12 +86,17 @@ def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, 
 
     # Först beräkna preliminära vikter
     for malt, (percentage, potential_sg) in draft["fermentables"].items():
-        ppg = (potential_sg - 1) * 1000
+        # Ensure potential_sg is valid and not causing division by zero
+        potential_sg = max(1.001, float(potential_sg))
+        ppg = max(0.1, (potential_sg - 1) * 1000)  # Prevent division by zero
+        
+        # Prevent division by zero in the calculation
         malt_weight_lbs = (percentage / 100.0) * (required_gp / (ppg * efficiency))
         temp_weights[malt] = malt_weight_lbs
         total_weight += malt_weight_lbs
 
     # Justera vikterna för att matcha exakta procentandelar
+    total_weight = max(0.001, total_weight)  # Ensure non-zero total weight
     for malt, (percentage, _) in draft["fermentables"].items():
         target_weight = (percentage / 100.0) * total_weight
         adjusted_weight_kg = (target_weight / 2.20462)  # Convert to kg
@@ -89,10 +105,14 @@ def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, 
     # 4. Beräkna faktisk OG baserat på justerade vikter
     total_gp = 0.0
     for malt, (_, potential_sg) in draft["fermentables"].items():
+        # Ensure potential_sg is valid
+        potential_sg = max(1.001, float(potential_sg))
         ppg = (potential_sg - 1) * 1000
         malt_weight_lbs = fermentables[malt] * 2.20462  # Convert kg to lbs
         total_gp += malt_weight_lbs * ppg * efficiency
 
+    # Prevent division by zero in final OG calculation
+    post_boil_volume_gallons = max(0.001, post_boil_volume_gallons)
     actual_og = 1 + (total_gp / (post_boil_volume_gallons * 1000))
     
     return {
@@ -100,23 +120,42 @@ def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, 
         "fermentables": fermentables
     }
 
-    
-
-
 def calculate_malt_weight(percentage, target_og, post_boil_volume, efficiency, potential_sg):
     """Hjälpfunktion för att beräkna maltvikt"""
     required_points = (target_og - 1) * post_boil_volume
     return (percentage / 100.0) * (required_points / ((potential_sg - 1) * efficiency))
 
 def calculate_ibu(draft: Dict[str, Any], equipment: Dict[str, Any], post_boil_volume: float):
+    """
+    Calculate IBU contribution from hops using Tinseth formula.
+    Added extra debug logging and safeguards for division by zero.
+    """
+    print("\n=== IBU Calculation Debug ===")
+    print(f"Post-boil volume: {post_boil_volume:.2f}L")
+    
+    # Add safeguard against division by zero
+    if post_boil_volume <= 0:
+        print("WARNING: Post-boil volume is zero or negative. Using minimum safe value.")
+        post_boil_volume = 0.001  # Minimum safe value to avoid division by zero
+    
     total_ibu = 0.0
     post_boil_gallons = post_boil_volume * 0.264172  # Liter → gallon
     hops_with_amounts = []
+    
+    # Debug hop info
+    print("DEBUG Hop info:")
+    for i, hop in enumerate(draft.get("hops", [])):
+        print(f"  - Hop {i+1}: {hop.get('name', 'Unknown')}, Alpha: {hop.get('alpha', 'N/A')}%, Time: {hop.get('time', 'N/A')}min")
 
     for hop in draft["hops"]:
-        alpha = hop["alpha"] / 100.0  # Konvertera till decimalform
-        time = hop["time"]
-        target_ibu = hop["ibu_contribution"]
+        # Ensure alpha, time and target_ibu are valid numbers
+        alpha = max(0.0001, hop.get("alpha", 0) / 100.0)  # Ensure non-zero
+        time = max(0.1, hop.get("time", 0))
+        target_ibu = max(0, hop.get("ibu_contribution", 0))
+        
+        # Print detailed debug info
+        print(f"\nCalculating for {hop.get('name', 'Unknown Hop')}:")
+        print(f"  Alpha: {alpha:.4f} (decimal), Time: {time} min, Target IBU: {target_ibu}")
         
         # Korrigerad Tinseth utilization formel
         # Bigness factor = 1.65 * 0.000125^(wort gravity - 1)
@@ -128,9 +167,20 @@ def calculate_ibu(draft: Dict[str, Any], equipment: Dict[str, Any], post_boil_vo
         # Total utilization
         utilization = bigness_factor * boil_time_factor
         
-        # Beräkna mängd humle i ounces
+        print(f"  Utilization factors - Bigness: {bigness_factor:.4f}, Boil time: {boil_time_factor:.4f}")
+        print(f"  Total utilization: {utilization:.4f} ({utilization*100:.1f}%)")
+        
+        # Prevent division by zero in amount calculation
+        if alpha * utilization == 0:
+            print("  WARNING: Alpha * utilization is zero! Using minimum value.")
+            alpha = max(0.001, alpha)
+            utilization = max(0.001, utilization)
+        
+        # Beräkna mängd humle i ounces (with safeguards against division by zero)
         amount_oz = (target_ibu * post_boil_gallons) / (alpha * 7489.2 * utilization)  # 7489.2 är en konstant för metrisk konvertering
         amount_g = amount_oz * 28.3495  # Omvandla till gram
+
+        print(f"  Calculated amount: {amount_g:.1f}g ({amount_oz:.2f}oz)")
 
         hop_data = {
             "name": hop["name"],
@@ -144,8 +194,11 @@ def calculate_ibu(draft: Dict[str, Any], equipment: Dict[str, Any], post_boil_vo
         hops_with_amounts.append(hop_data)
         total_ibu += target_ibu
 
+    # Ensure we never return NaN or infinity values
+    total_ibu = max(0, min(150, total_ibu))  # Cap between 0 and 150 IBUs
+    print(f"\nFinal IBU calculation: {total_ibu:.1f}")
+    
     return total_ibu, hops_with_amounts
-
 
 
 def calculate_ebc(draft: Dict[str, Any], fermentables: Dict[str, float], post_boil_volume: float) -> float:
@@ -155,6 +208,11 @@ def calculate_ebc(draft: Dict[str, Any], fermentables: Dict[str, float], post_bo
     print("\n=== EBC Calculation Debug ===")
     print(f"Post-boil volume: {post_boil_volume:.2f}L")
     
+    # Add safeguard against division by zero
+    if post_boil_volume <= 0:
+        print("WARNING: Post-boil volume is zero or negative. Using minimum safe value.")
+        post_boil_volume = 0.001  # Minimum safe value to avoid division by zero
+
     post_boil_gallons = post_boil_volume * 0.264172
     total_mcu = 0.0
 
@@ -182,6 +240,9 @@ def calculate_ebc(draft: Dict[str, Any], fermentables: Dict[str, float], post_bo
     print(f"Final SRM: {srm:.1f}")
     print(f"Final EBC: {ebc:.1f}")
     
+    # Ensure we never return NaN or infinity values
+    ebc = max(0, min(80, ebc))  # Cap between 0 and 80 EBC
+
     return round(ebc, 1)
 
 def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipment: Dict[str, Any]) -> str:

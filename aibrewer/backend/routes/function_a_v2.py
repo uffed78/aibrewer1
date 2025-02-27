@@ -46,53 +46,98 @@ def srm_to_lovibond(srm: float) -> float:
 @function_a_v2_bp.route('/generate-draft', methods=['POST'])
 def generate_draft():
     data = request.json
-    style = data.get('style')
+    style = data.get('style', "")
     ingredients = data.get('ingredients', [])
     profile = data.get('profile', "Grainfather G30")
-
+    
+    # Get API credentials
+    api_id = data.get('apiId')
+    api_key = data.get('apiKey')
+    
+    # Sanitize style name to avoid potential issues with special characters
+    style = style.strip()
+    
+    # Get inventory metadata from request instead of making a new API call
+    inventory_data = data.get('inventory_data')
+    
+    # Only fetch from Brewfather if inventory data wasn't provided
+    if not inventory_data:
+        if not api_id or not api_key:
+            from os import getenv
+            api_id = getenv("BREWFATHER_USERID")
+            api_key = getenv("BREWFATHER_APIKEY")
+            
+        if api_id and api_key:
+            try:
+                inventory_data = get_all_inventory(api_id=api_id, api_key=api_key)
+            except Exception as e:
+                # Continue with default values if API call fails
+                print(f"Warning: Failed to get inventory: {str(e)}")
+                inventory_data = {"fermentables": [], "hops": [], "yeasts": []}
+        else:
+            inventory_data = {"fermentables": [], "hops": [], "yeasts": []}
+    
     equipment = get_equipment_profile(profile)
-    inventory_data = get_all_inventory()
     
     fermentables_map = {f["name"].lower(): f for f in inventory_data.get("fermentables", [])}
     hops_map = {h["name"].lower(): h for h in inventory_data.get("hops", [])}
     yeasts_map = {y["name"].lower(): y for y in inventory_data.get("yeasts", [])}
-
-    gpt_prompt = f"""
-    Skapa ett ölrecept i JSON-format för en {style} med följande ingredienser:
-    {ingredients}
-
-    Bryggverkets begränsningar:
-    - Maximal kokvolym: {equipment['params']['boil_size']}L
-    - Bryggverkets effektivitet: {equipment['params']['efficiency']}%
-
-    Se till att receptförslagen är stiltypiska enligt bjpc 2021.
-
-    Svara **endast** med ett JSON-objekt, inget annat. Inkludera följande fält:
-    {{
-        "name": "Receptnamn",
-        "target_og": 1.045,  
-        "fermentables": {{
-            "Maltnamn": [procent, potential_sg]  
-        }},
-        "hops": [
-            {{
-                "name": "Humlenamn",
-                "alpha": alpha_procent,
-                "time": koktid,
-                "ibu_contribution": önskad_ibu
-            }}
-        ],
-        "yeast": {{
-            "type": "Jästnamn",
-            "amount": antal_förpackningar
-        }}
-    }}
-    """
-
-    draft = generate_recipe_with_gpt(gpt_prompt)
-
+    
     try:
-        draft_json = json.loads(draft)
+        # Create a nicely formatted list of ingredients for the prompt
+        formatted_ingredients = ""
+        for ing in ingredients:
+            formatted_ingredients += f"- {ing.get('name', '')} ({ing.get('category', '')})\n"
+        
+        gpt_prompt = f"""
+        Skapa ett ölrecept i JSON-format för en {style} med följande ingredienser:
+        {formatted_ingredients}
+
+        Bryggverkets begränsningar:
+        - Maximal kokvolym: {equipment['params']['boil_size']}L
+        - Bryggverkets effektivitet: {equipment['params']['efficiency']}%
+
+        Se till att receptförslagen är stiltypiska enligt bjpc 2021.
+
+        Svara **endast** med ett JSON-objekt, inget annat. Inkludera följande fält:
+        {{
+            "name": "Receptnamn",
+            "target_og": 1.045,  
+            "fermentables": {{
+                "Maltnamn": [procent, potential_sg]  
+            }},
+            "hops": [
+                {{
+                    "name": "Humlenamn",
+                    "alpha": alpha_procent,
+                    "time": koktid,
+                    "ibu_contribution": önskad_ibu
+                }}
+            ],
+            "yeast": {{
+                "type": "Jästnamn",
+                "amount": antal_förpackningar
+            }}
+        }}
+        """
+
+        draft = generate_recipe_with_gpt(gpt_prompt)
+        
+        # Try to extract JSON from GPT response if it's not pure JSON
+        draft_text = draft.strip()
+        if not (draft_text.startswith("{") and draft_text.endswith("}")):
+            # Try to find JSON object in response
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', draft_text)
+            if json_match:
+                draft_text = json_match.group(0)
+            else:
+                return jsonify({
+                    "error": "Could not extract valid JSON from GPT response",
+                    "raw_response": draft
+                }), 400
+        
+        draft_json = json.loads(draft_text)
         
         # Spara originalformatet för fermentables för beräkningar
         calculation_fermentables = draft_json["fermentables"].copy()
@@ -133,9 +178,9 @@ def generate_draft():
 
         # Beräkna post-boil volume
         post_boil_volume = (equipment["params"]["boil_size"] - 
-                          (equipment["params"]["boil_size"] * 
-                           (equipment["params"]["evap_rate"] / 100.0) * 
-                           (equipment["params"]["boil_time"] / 60.0))) * 0.96
+                        (equipment["params"]["boil_size"] * 
+                        (equipment["params"]["evap_rate"] / 100.0) * 
+                        (equipment["params"]["boil_time"] / 60.0))) * 0.96
 
         # Beräkna OG, IBU och EBC
         og_result = calculate_og(draft_json, equipment)
@@ -159,7 +204,6 @@ def generate_draft():
             "error": f"Error processing draft: {str(e)}", 
             "raw_response": draft
         }), 500
-
 
 # 3️⃣ Backend validerar och beräknar
 @function_a_v2_bp.route('/calculate', methods=['POST'])
@@ -186,15 +230,14 @@ def calculate():
 
     # Utför beräkningar
     calculated = {
-        "og": og_result["og"],
+        "og": og_result["og"],        
         "ibu": calculate_ibu(recipe_draft, equipment, post_boil_volume),
         "ebc": calculate_ebc(recipe_draft, og_result["fermentables"], post_boil_volume),
         "fermentables": og_result["fermentables"],
-        "abv": None  # Beräknas senare
+        "abv": None  # Beräknas senare        
     }
     
     return jsonify({"calculated": calculated})
-
 
 # 4️⃣ Backend genererar BeerXML
 @function_a_v2_bp.route('/generate-xml', methods=['POST'])
@@ -204,11 +247,21 @@ def generate_xml():
         draft = data.get('draft')
         calculated = data.get('calculated', {})
         profile = data.get('profile', "Grainfather G30")
-        inventory_data = get_all_inventory()  # Get current inventory data
+        
+        # Get API credentials 
+        api_id = data.get('apiId')
+        api_key = data.get('apiKey')
+        
+        if not api_id or not api_key:
+            return jsonify({"error": "API ID och API Key krävs"}), 400
+            
+        # Use the provided credentials to get inventory data
+        inventory_data = get_all_inventory(api_id=api_id, api_key=api_key)
 
         # Debug logging
         print("DEBUG: Received draft:", json.dumps(draft, indent=2))
         print("DEBUG: Received calculated:", json.dumps(calculated, indent=2))
+        print("DEBUG: Using API credentials for Brewfather")
 
         # Get equipment profile
         equipment = get_equipment_profile(profile)
@@ -228,7 +281,6 @@ def generate_xml():
                  if f["name"].lower() == malt_name.lower()),
                 None
             )
-            
             # If no exact match, try partial match
             if not malt_data:
                 malt_data = next(
@@ -249,7 +301,6 @@ def generate_xml():
                  if h["name"].lower() == hop_name.lower()),
                 None
             )
-            
             # If no exact match, try partial match
             if not hop_data:
                 hop_data = next(
@@ -316,7 +367,7 @@ def generate_xml():
             "og": og_result["og"],
             "fermentables": og_result["fermentables"],
             "ibu": ibu_result,
-            "ebc": calculate_ebc(enriched_draft, og_result["fermentables"], post_boil_volume)
+            "ebc": calculate_ebc(enriched_draft, og_result["fermentables"], post_boil_volume)        
         }
 
         # Generate XML
@@ -335,7 +386,6 @@ def generate_xml():
             as_attachment=True,
             download_name=filename
         )
-
     except Exception as e:
         print(f"ERROR in generate-xml: {str(e)}")
         print(f"DEBUG: Current draft state: {json.dumps(draft, indent=2)}")
@@ -345,8 +395,6 @@ def generate_xml():
             "draft": draft,
             "calculated": calculated
         }), 500
-
-
 
 # 5️⃣ Iterativ diskussion med GPT
 @function_a_v2_bp.route('/discuss', methods=['POST'])
@@ -363,8 +411,6 @@ def discuss():
     
     response = continue_gpt_conversation(messages)
     return jsonify({"response": response})
-
-
 
 @function_a_v2_bp.route('/test-calculations', methods=['POST'])
 def test_calculations():
@@ -389,11 +435,10 @@ def test_calculations():
     boil_size = equipment["params"]["boil_size"]
     evap_rate = equipment["params"]["evap_rate"] / 100.0
     cooling_factor = 0.96
-    
     boil_off_hours = boil_time / 60.0
     boiled_off = boil_size * evap_rate * boil_off_hours
     post_boil_volume = (boil_size - boiled_off) * cooling_factor
-    
+
     calculated = {
         "og": og_result["og"],
         "ibu": calculate_ibu(draft, equipment, post_boil_volume),
@@ -410,10 +455,20 @@ def test_calculations():
         "beerxml": beerxml
     })
 
-@function_a_v2_bp.route('/get-inventory', methods=['GET'])
+@function_a_v2_bp.route('/get-inventory', methods=['POST'])
 def get_inventory_route():
     """
-    Hämtar hela inventory från Brewfather och returnerar det som JSON.
+    Hämtar hela inventory från Brewfather baserat på användaruppgifter och returnerar det som JSON.
     """
-    inventory = get_all_inventory()
-    return jsonify(inventory)
+    data = request.json
+    api_id = data.get('apiId')
+    api_key = data.get('apiKey')
+    
+    if not api_id or not api_key:
+        return jsonify({"error": "API ID och API Key krävs"}), 400
+        
+    try:
+        inventory = get_all_inventory(api_id=api_id, api_key=api_key)
+        return jsonify(inventory)
+    except Exception as e:
+        return jsonify({"error": f"Kunde inte hämta inventory: {str(e)}"}), 500

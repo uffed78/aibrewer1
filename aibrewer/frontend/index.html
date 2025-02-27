@@ -116,10 +116,128 @@
             background-color: #f0f0f0;
             border-radius: 5px;
         }
+
+        /* Nya stilar för inställningsdialog */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 5px;
+            width: 80%;
+            max-width: 500px;
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: black;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        
+        .user-profile {
+            display: flex;
+            align-items: center;
+            background-color: #e9f5f9;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .user-profile span {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        .user-profile button {
+            margin-left: auto;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        #settingsBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #f1f1f1;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
     </style>
 </head>
 
 <body>
+    <!-- Lägg till en inställningsknapp i övre högra hörnet -->
+    <button id="settingsBtn">⚙️ Inställningar</button>
+    
+    <!-- Inställningsdialog -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Brewfather Inställningar</h2>
+            <div id="currentUserDisplay"></div>
+            
+            <form id="settingsForm">
+                <div class="form-group">
+                    <label for="username">Användarnamn:</label>
+                    <input type="text" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="apiId">Brewfather API ID:</label>
+                    <input type="text" id="apiId" required>
+                </div>
+                <div class="form-group">
+                    <label for="apiKey">Brewfather API Key:</label>
+                    <input type="password" id="apiKey" required>
+                </div>
+                <button type="submit">Spara inställningar</button>
+            </form>
+            
+            <div id="savedProfiles">
+                <h3>Sparade profiler</h3>
+                <div id="userProfilesList">
+                    <!-- Sparade profiler kommer att listas här -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <div class="sidebar">
         <button id="getInventoryBtn">Hämta Inventory</button>
         <button id="suggestStylesBtn">Skicka Inventory till GPT</button>
@@ -171,16 +289,207 @@
         
         // Global variabel för att lagra chatthistoriken
         let chatHistory = [];
+        
+        // Global variabel för användarinställningar
+        let currentUser = null;
 
-        // Hämta inventory
+        // Initiera användarhantering och inställningsdialog
+        document.addEventListener('DOMContentLoaded', function() {
+            initUserSettings();
+            
+            // Initialisera chattfunktionalitet
+            addChatMessage("System", "Hej! Jag är din bryggassistent. Ställ frågor om receptet, ingredienser eller bryggning!");
+            
+            // Förbereda chatthistoriken med systeminformation
+            chatHistory = [
+                { role: "system", content: "Du är en AI-assistent som hjälper med ölbryggning. Använd svenska språket i dina svar." }
+            ];
+        });
+        
+        // Inställningshantering
+        function initUserSettings() {
+            // Hämta sparade användarprofiler
+            let savedProfiles = JSON.parse(localStorage.getItem('brewfatherProfiles')) || [];
+            
+            // Hämta senast använda profil
+            let lastUsedProfile = localStorage.getItem('lastUsedProfile');
+            
+            if (lastUsedProfile) {
+                currentUser = savedProfiles.find(p => p.username === lastUsedProfile);
+            }
+            
+            // Om det finns en profil, visa den
+            if (currentUser) {
+                document.getElementById('username').value = currentUser.username;
+                document.getElementById('apiId').value = currentUser.apiId;
+                document.getElementById('apiKey').value = currentUser.apiKey;
+                updateCurrentUserDisplay();
+            }
+            
+            // Visa alla sparade profiler
+            updateUserProfilesList(savedProfiles);
+            
+            // Hantera inställningsformulär
+            document.getElementById('settingsForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const username = document.getElementById('username').value.trim();
+                const apiId = document.getElementById('apiId').value.trim();
+                const apiKey = document.getElementById('apiKey').value.trim();
+                
+                // Uppdatera savedProfiles
+                let profiles = JSON.parse(localStorage.getItem('brewfatherProfiles')) || [];
+                
+                // Kolla om användaren redan finns
+                const existingIndex = profiles.findIndex(p => p.username === username);
+                
+                if (existingIndex >= 0) {
+                    profiles[existingIndex] = { username, apiId, apiKey };
+                } else {
+                    profiles.push({ username, apiId, apiKey });
+                }
+                
+                // Spara till localStorage
+                localStorage.setItem('brewfatherProfiles', JSON.stringify(profiles));
+                localStorage.setItem('lastUsedProfile', username);
+                
+                // Uppdatera currentUser
+                currentUser = { username, apiId, apiKey };
+                
+                // Uppdatera UI
+                updateUserProfilesList(profiles);
+                updateCurrentUserDisplay();
+                
+                // Stäng modal
+                document.getElementById('settingsModal').style.display = 'none';
+                
+                alert(`Inställningar sparade för ${username}`);
+            });
+            
+            // Öppna inställningsdialogen
+            document.getElementById('settingsBtn').addEventListener('click', function() {
+                document.getElementById('settingsModal').style.display = 'block';
+            });
+            
+            // Stäng inställningsdialogen
+            document.querySelector('.close').addEventListener('click', function() {
+                document.getElementById('settingsModal').style.display = 'none';
+            });
+            
+            // Stäng dialogen om användaren klickar utanför
+            window.addEventListener('click', function(event) {
+                if (event.target === document.getElementById('settingsModal')) {
+                    document.getElementById('settingsModal').style.display = 'none';
+                }
+            });
+        }
+        
+        // Uppdatera listan över användarprofiler
+        function updateUserProfilesList(profiles) {
+            const listElement = document.getElementById('userProfilesList');
+            listElement.innerHTML = '';
+            
+            if (profiles.length === 0) {
+                listElement.innerHTML = '<p>Inga profiler sparade ännu.</p>';
+                return;
+            }
+            
+            profiles.forEach(profile => {
+                const profileDiv = document.createElement('div');
+                profileDiv.className = 'user-profile';
+                
+                profileDiv.innerHTML = `
+                    <span>${profile.username}</span>
+                    <button class="use-profile" data-username="${profile.username}">Använd</button>
+                    <button class="delete-profile" data-username="${profile.username}">Ta bort</button>
+                `;
+                
+                listElement.appendChild(profileDiv);
+            });
+            
+            // Lägg till händelsehanterare för knapparna
+            document.querySelectorAll('.use-profile').forEach(button => {
+                button.addEventListener('click', function() {
+                    const username = this.getAttribute('data-username');
+                    const profile = profiles.find(p => p.username === username);
+                    
+                    if (profile) {
+                        document.getElementById('username').value = profile.username;
+                        document.getElementById('apiId').value = profile.apiId;
+                        document.getElementById('apiKey').value = profile.apiKey;
+                        
+                        // Uppdatera currentUser och spara till localStorage
+                        currentUser = profile;
+                        localStorage.setItem('lastUsedProfile', username);
+                        updateCurrentUserDisplay();
+                    }
+                });
+            });
+            
+            document.querySelectorAll('.delete-profile').forEach(button => {
+                button.addEventListener('click', function() {
+                    const username = this.getAttribute('data-username');
+                    if (confirm(`Är du säker på att du vill ta bort profilen för ${username}?`)) {
+                        const updatedProfiles = profiles.filter(p => p.username !== username);
+                        localStorage.setItem('brewfatherProfiles', JSON.stringify(updatedProfiles));
+                        
+                        // Om den borttagna profilen var den aktiva, nollställ currentUser
+                        if (currentUser && currentUser.username === username) {
+                            currentUser = null;
+                            localStorage.removeItem('lastUsedProfile');
+                            document.getElementById('username').value = '';
+                            document.getElementById('apiId').value = '';
+                            document.getElementById('apiKey').value = '';
+                            updateCurrentUserDisplay();
+                        }
+                        
+                        updateUserProfilesList(updatedProfiles);
+                    }
+                });
+            });
+        }
+        
+        // Uppdatera visningen av nuvarande användare
+        function updateCurrentUserDisplay() {
+            const displayElement = document.getElementById('currentUserDisplay');
+            
+            if (currentUser) {
+                displayElement.innerHTML = `<div class="current-user">Inloggad som: <strong>${currentUser.username}</strong></div>`;
+            } else {
+                displayElement.innerHTML = '<div class="current-user">Ingen användare vald</div>';
+            }
+        }
+        
+        // Hämta inventory - uppdaterad för att skicka med användaruppgifter
         document.getElementById('getInventoryBtn').addEventListener('click', async () => {
+            if (!currentUser) {
+                alert("Du måste konfigurera en Brewfather-profil först. Klicka på 'Inställningar'.");
+                document.getElementById('settingsModal').style.display = 'block';
+                return;
+            }
+            
             try {
-                const response = await fetch(`${baseUrl}/get-inventory`);
+                const response = await fetch(`${baseUrl}/get-inventory`, {
+                    method: 'POST',  // Ändrad till POST för att kunna skicka användaruppgifter
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        apiId: currentUser.apiId,
+                        apiKey: currentUser.apiKey
+                    })
+                });
+                
                 const data = await response.json();
+                
+                if (data.error) {
+                    alert(`Fel: ${data.error}`);
+                    return;
+                }
+                
                 inventoryData = data;
                 displayInventory(data);
             } catch (error) {
                 console.error('Fel vid hämtning av inventory:', error);
+                alert(`Ett fel inträffade: ${error.message}`);
             }
         });
 
@@ -328,16 +637,64 @@
         async function generateDraft(style) {
             const ingredients = getSelectedIngredients();
             const profile = "Grainfather G30";
+            
+            if (ingredients.length === 0) {
+                alert("Du måste välja minst en ingrediens för att generera ett recept.");
+                return;
+            }
+            
+            // Check if user credentials exist
+            if (!currentUser) {
+                alert("Du måste konfigurera en Brewfather-profil först. Klicka på 'Inställningar'.");
+                document.getElementById('settingsModal').style.display = 'block';
+                return;
+            }
+            
+            // Show loading state
+            const draftSection = document.getElementById('draftSection');
+            draftSection.classList.remove('hidden');
+            const draftDisplay = document.getElementById('draftDisplay');
+            draftDisplay.innerHTML = '<div style="text-align: center; padding: 20px;"><b>Genererar receptutkast...</b><br>Detta kan ta upp till 30 sekunder.</div>';
+            
             try {
+                console.log(`Genererar recept för stil: "${style}" med ingredienser:`, ingredients);
+                
                 const response = await fetch(`${baseUrl}/generate-draft`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ style, ingredients, profile })
+                    body: JSON.stringify({ 
+                        style, 
+                        ingredients, 
+                        profile,
+                        apiId: currentUser.apiId,
+                        apiKey: currentUser.apiKey,
+                        inventory_data: inventoryData // Send cached inventory data if available
+                    })
                 });
+                
                 const data = await response.json();
+                
+                if (!response.ok) {
+                    const errorMessage = data.error || "Det uppstod ett fel vid generering av receptutkast";
+                    console.error('API error:', errorMessage, data);
+                    throw new Error(errorMessage);
+                }
+                
                 displayDraft(data.draft);
             } catch (error) {
                 console.error('Fel vid generering av draft:', error);
+                draftDisplay.innerHTML = `<div style="color: red; padding: 10px; border: 1px solid red; margin: 10px 0;">
+                    <b>Fel vid generering av recept:</b><br>${error.message}<br><br>
+                    <button id="retryDraftBtn">Försök igen</button>
+                </div>`;
+                
+                // Add retry button functionality
+                setTimeout(() => {
+                    const retryBtn = document.getElementById('retryDraftBtn');
+                    if (retryBtn) {
+                        retryBtn.addEventListener('click', () => generateDraft(style));
+                    }
+                }, 100);
             }
         }
 
@@ -378,7 +735,6 @@
             <button id="updateRecipeBtn" class="action-button">Uppdatera recept baserat på chatt</button>
         </div>
     `;
-            
             // Lägg till event listener för uppdateringsknappen
             setTimeout(() => {
                 const updateBtn = document.getElementById('updateRecipeBtn');
@@ -391,6 +747,13 @@
         // Generera BeerXML
         document.getElementById('generateXmlBtn').addEventListener('click', async () => {
             console.log("⚡ Försöker generera BeerXML...");
+
+            // Check if user credentials exist
+            if (!currentUser) {
+                alert("Du måste konfigurera en Brewfather-profil först. Klicka på 'Inställningar'.");
+                document.getElementById('settingsModal').style.display = 'block';
+                return;
+            }
 
             // ✅ Hämta den kompletta JSON-datan istället för bara det som syns
             const draftText = document.getElementById('draftDisplay').dataset.draft;
@@ -411,8 +774,19 @@
             const calculated = {};  // Placeholder, kan behöva uppdateras om vi lagrar beräkningar
             const profile = "Grainfather G30";
 
+            // Show loading indicator
+            const btnOrigText = document.getElementById('generateXmlBtn').textContent;
+            document.getElementById('generateXmlBtn').textContent = "Genererar...";
+            document.getElementById('generateXmlBtn').disabled = true;
+
             // 🛠 Logga exakt vad som skickas till backend
-            const payload = { draft, calculated, profile };
+            const payload = { 
+                draft, 
+                calculated, 
+                profile,
+                apiId: currentUser.apiId,
+                apiKey: currentUser.apiKey
+            };
             console.log("📡 JSON som skickas till backend:", JSON.stringify(payload, null, 2));
 
             try {
@@ -424,6 +798,10 @@
 
                 console.log("📡 API-svar från generate-xml:", response);
 
+                // Reset button
+                document.getElementById('generateXmlBtn').textContent = btnOrigText;
+                document.getElementById('generateXmlBtn').disabled = false;
+
                 if (response.ok) {
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
@@ -434,10 +812,18 @@
                     a.click();
                     a.remove();
                 } else {
-                    console.error('❌ Fel vid generering av BeerXML:', response.status, await response.text());
+                    // Parse and show the error message
+                    const errorData = await response.json();
+                    console.error('❌ Fel vid generering av BeerXML:', errorData);
+                    alert(`Fel vid generering av BeerXML: ${errorData.error || response.status}`);
                 }
             } catch (error) {
                 console.error('❌ Fel vid generering av BeerXML:', error);
+                alert(`Ett fel uppstod: ${error.message}`);
+                
+                // Reset button on error too
+                document.getElementById('generateXmlBtn').textContent = btnOrigText;
+                document.getElementById('generateXmlBtn').disabled = false;
             }
         });
 
@@ -546,7 +932,6 @@
         async function sendChatMessage() {
             const chatInput = document.getElementById('chatInput');
             const userMessage = chatInput.value.trim();
-            
             if (!userMessage) return;
             
             // Rensa input-fältet
