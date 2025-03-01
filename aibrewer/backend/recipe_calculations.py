@@ -249,15 +249,31 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
     """
     Generates a complete BeerXML file with all necessary ingredient information.
     Maps Brewfather format to BeerXML format correctly.
-    
-    Args:
-        draft: Recipe draft containing ingredient details and metadata
-        calculated: Calculated values (OG, IBU, etc.)
-        equipment: Equipment profile information
-    
-    Returns:
-        str: Complete BeerXML content
     """
+    # Ensure numeric types for critical values
+    def ensure_float(value):
+        if value is None:
+            return 0.0
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.0
+
+    # Pre-process values to ensure they're numeric
+    batch_size = ensure_float(equipment.get("params", {}).get("batch_size", 20.0))
+    boil_size = ensure_float(equipment.get("params", {}).get("boil_size", 25.0))
+    boil_time = ensure_float(equipment.get("params", {}).get("boil_time", 60.0))
+    efficiency = ensure_float(equipment.get("params", {}).get("brewhouse_efficiency", 70.0))
+    
+    total_ibu = calculated.get("ibu")
+    if isinstance(total_ibu, tuple) and len(total_ibu) > 0:
+        total_ibu = ensure_float(total_ibu[0])
+    else:
+        total_ibu = ensure_float(total_ibu)
+    
+    og = ensure_float(calculated.get("og"))
+    ebc = ensure_float(calculated.get("ebc"))
+
     xml_parts = [
         '<?xml version="1.0" encoding="ISO-8859-1"?>',
         '<RECIPES>',
@@ -266,10 +282,10 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
         '        <VERSION>1</VERSION>',
         '        <TYPE>All Grain</TYPE>',
         f'        <BREWER>{equipment.get("brewer", "Unknown")}</BREWER>',
-        f'        <BATCH_SIZE>{equipment["params"]["batch_size"]}</BATCH_SIZE>',
-        f'        <BOIL_SIZE>{equipment["params"]["boil_size"]}</BOIL_SIZE>',
-        f'        <BOIL_TIME>{equipment["params"]["boil_time"]}</BOIL_TIME>',
-        f'        <EFFICIENCY>{equipment["params"]["brewhouse_efficiency"]}</EFFICIENCY>'
+        f'        <BATCH_SIZE>{batch_size}</BATCH_SIZE>',
+        f'        <BOIL_SIZE>{boil_size}</BOIL_SIZE>',
+        f'        <BOIL_TIME>{boil_time}</BOIL_TIME>',
+        f'        <EFFICIENCY>{efficiency}</EFFICIENCY>'
     ]
     
     # Add style information if available
@@ -285,28 +301,30 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
             '        </STYLE>'
         ])
 
-    # Add calculated values
-    total_ibu = calculated["ibu"][0] if isinstance(calculated["ibu"], tuple) else calculated["ibu"]
+    # Add calculated values - ensure they're all floats
     xml_parts.extend([
-        f'        <OG>{calculated["og"]}</OG>',
+        f'        <OG>{og}</OG>',
         f'        <IBU>{total_ibu}</IBU>',
-        f'        <EST_COLOR>{calculated["ebc"]}</EST_COLOR>'
+        f'        <EST_COLOR>{ebc}</EST_COLOR>'
     ])
 
-    # Add fermentables section
+    # Add fermentables section with type safety
     xml_parts.append('        <FERMENTABLES>')
-    for malt_name, values in draft["fermentables"].items():
-        percentage = values[0]  # Använd procentandelen från draft
-        malt_metadata = draft["fermentables_metadata"].get(malt_name, {})
+    for malt_name, values in draft.get("fermentables", {}).items():
+        percentage = ensure_float(values[0]) if isinstance(values, (list, tuple)) and len(values) > 0 else 0.0
+        malt_metadata = draft.get("fermentables_metadata", {}).get(malt_name, {})
+        malt_amount = ensure_float(calculated.get("fermentables", {}).get(malt_name, 0.0))
+        malt_yield = ensure_float(malt_metadata.get("potentialPercentage", 75.0))
+        malt_color = ensure_float(malt_metadata.get("color", 0.0))
         
         xml_parts.extend([
             '            <FERMENTABLE>',
             f'                <NAME>{malt_name}</NAME>',
             f'                <VERSION>1</VERSION>',
             f'                <TYPE>{malt_metadata.get("type", "Grain")}</TYPE>',
-            f'                <AMOUNT>{calculated["fermentables"][malt_name]}</AMOUNT>',  # Använd vikten från calculated
-            f'                <YIELD>{malt_metadata.get("potentialPercentage", 75)}</YIELD>',
-            f'                <COLOR>{malt_metadata.get("color", 0)}</COLOR>',
+            f'                <AMOUNT>{malt_amount}</AMOUNT>',
+            f'                <YIELD>{malt_yield}</YIELD>',
+            f'                <COLOR>{malt_color}</COLOR>',
             f'                <SUPPLIER>{malt_metadata.get("supplier", "")}</SUPPLIER>',
             f'                <ORIGIN>{malt_metadata.get("origin", "")}</ORIGIN>',
             f'                <NOT_FERMENTABLE>{str(malt_metadata.get("notFermentable", False)).lower()}</NOT_FERMENTABLE>',
@@ -314,21 +332,26 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
         ])
     xml_parts.append('        </FERMENTABLES>')
 
-
-    # Add hops section with correct mapping
+    # Add hops section with type safety
     xml_parts.append('        <HOPS>')
-    hops_data = calculated["ibu"][1] if isinstance(calculated["ibu"], tuple) else []
+    hops_data = calculated.get("ibu", [[], []])[1] if isinstance(calculated.get("ibu"), tuple) else []
     for hop in hops_data:
-        hop_metadata = next((h for h in draft.get("hops", []) if h["name"] == hop["name"]), {})
+        hop_name = hop.get("name", "Unknown Hop")
+        hop_alpha = ensure_float(hop.get("alpha", 0.0))
+        hop_time = ensure_float(hop.get("time", 0.0))
+        hop_amount = ensure_float(hop.get("calculated_amount", 0.0)) / 1000.0  # Convert to kg
+        
+        hop_metadata = next((h for h in draft.get("hops", []) if h.get("name") == hop_name), {})
+        
         xml_parts.extend([
             '            <HOP>',
             f'                <BF_ID>{hop_metadata.get("_id", "")}</BF_ID>',
-            f'                <NAME>{hop["name"]}</NAME>',
+            f'                <NAME>{hop_name}</NAME>',
             '                <VERSION>1</VERSION>',
-            f'                <ALPHA>{hop["alpha"]}</ALPHA>',
-            f'                <AMOUNT>{hop["calculated_amount"] / 1000.0}</AMOUNT>',
+            f'                <ALPHA>{hop_alpha}</ALPHA>',
+            f'                <AMOUNT>{hop_amount}</AMOUNT>',
             f'                <USE>{hop_metadata.get("use", "Boil")}</USE>',
-            f'                <TIME>{hop["time"]}</TIME>',
+            f'                <TIME>{hop_time}</TIME>',
             f'                <FORM>{hop_metadata.get("form", "Pellet")}</FORM>',
             '            </HOP>'
         ])

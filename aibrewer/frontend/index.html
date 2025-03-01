@@ -241,7 +241,7 @@
     <div class="sidebar">
         <button id="getInventoryBtn">Hämta Inventory</button>
         <button id="suggestStylesBtn">Skicka Inventory till GPT</button>
-        <button id="generateDraftBtn">Generera Draft</button>
+        <!-- Removed unused button: generateDraftBtn -->
         <button id="generateXmlBtn">Generera BeerXML</button>
     </div>
 
@@ -297,13 +297,13 @@
         document.addEventListener('DOMContentLoaded', function() {
             initUserSettings();
             
-            // Initialisera chattfunktionalitet
-            addChatMessage("System", "Hej! Jag är din bryggassistent. Ställ frågor om receptet, ingredienser eller bryggning!");
-            
             // Förbereda chatthistoriken med systeminformation
             chatHistory = [
                 { role: "system", content: "Du är en AI-assistent som hjälper med ölbryggning. Använd svenska språket i dina svar." }
             ];
+            
+            // Initialisera chattfunktionalitet - bara ett välkomstmeddelande
+            addChatMessage("System", "Hej! Jag är din bryggassistent. Ställ frågor om receptet, ingredienser eller bryggning!");
         });
         
         // Inställningshantering
@@ -910,17 +910,6 @@
             }
         }
 
-        // Initiera chattfunktionalitet så fort sidan laddas
-        document.addEventListener('DOMContentLoaded', function() {
-            // Lägga till en startmeddelande i chatthistoriken
-            addChatMessage("System", "Hej! Jag är din bryggassistent. Ställ frågor om receptet, ingredienser eller bryggning!");
-            
-            // Förbereda chatthistoriken med systeminformation
-            chatHistory = [
-                { role: "system", content: "Du är en AI-assistent som hjälper med ölbryggning. Använd svenska språket i dina svar." }
-            ];
-        });
-
         // Hantera att skicka chattmeddelanden
         document.getElementById('sendChatBtn').addEventListener('click', sendChatMessage);
         document.getElementById('chatInput').addEventListener('keypress', function(e) {
@@ -959,7 +948,37 @@
                 chatHistory.push({ role: "system", content: `Det aktuella receptet: ${JSON.stringify(draft, null, 2)}` });
             }
             
-            const payload = { messages: chatHistory, recipe: draft };
+            // NYTT: Lägg till information om tillgängliga ingredienser om vi har inventory-data
+            if (inventoryData && !chatHistory.some(msg => msg.role === "system" && msg.content.includes("tillgängliga ingredienser"))) {
+                // Skapa en sammanfattning av tillgängliga ingredienser
+                const inventorySummary = {
+                    fermentables: inventoryData.fermentables.map(item => ({
+                        name: item.name,
+                        amount: `${item.inventory} kg`,
+                        color: item.color || "N/A"
+                    })),
+                    hops: inventoryData.hops.map(item => ({
+                        name: item.name,
+                        amount: `${item.inventory} g`, 
+                        alpha: item.alpha || "N/A"
+                    })),
+                    yeasts: inventoryData.yeasts.map(item => ({
+                        name: item.name,
+                        amount: `${item.inventory} pkg`
+                    }))
+                };
+                
+                chatHistory.push({ 
+                    role: "system", 
+                    content: `Tillgängliga ingredienser i användarens inventory: ${JSON.stringify(inventorySummary, null, 2)}`
+                });
+            }
+            
+            const payload = { 
+                messages: chatHistory, 
+                recipe: draft,
+                inventory: inventoryData // NYTT: Skicka med inventory-data
+            };
             
             try {
                 // Visa en "loading" indikation

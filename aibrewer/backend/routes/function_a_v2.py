@@ -254,14 +254,17 @@ def generate_xml():
         
         if not api_id or not api_key:
             return jsonify({"error": "API ID och API Key krävs"}), 400
-            
-        # Use the provided credentials to get inventory data
-        inventory_data = get_all_inventory(api_id=api_id, api_key=api_key)
+        
+        try:    
+            # Use the provided credentials to get inventory data
+            inventory_data = get_all_inventory(api_id=api_id, api_key=api_key)
+        except Exception as e:
+            print(f"Warning: Failed to get inventory: {str(e)}")
+            inventory_data = {"fermentables": [], "hops": [], "yeasts": []}
 
         # Debug logging
         print("DEBUG: Received draft:", json.dumps(draft, indent=2))
         print("DEBUG: Received calculated:", json.dumps(calculated, indent=2))
-        print("DEBUG: Using API credentials for Brewfather")
 
         # Get equipment profile
         equipment = get_equipment_profile(profile)
@@ -272,56 +275,64 @@ def generate_xml():
                            (equipment["params"]["evap_rate"] / 100.0) * 
                            (equipment["params"]["boil_time"] / 60.0))) * 0.96
 
-        # Match fermentables with inventory data
-        fermentables_data = []
-        for malt_name in calculated.get("fermentables", {}):
-            # Look for exact match first
-            malt_data = next(
-                (f for f in inventory_data.get("fermentables", []) 
-                 if f["name"].lower() == malt_name.lower()),
-                None
-            )
-            # If no exact match, try partial match
-            if not malt_data:
+        # Use a try-except block for ingredient data matching to prevent failures
+        try:
+            # Match fermentables with inventory data
+            fermentables_data = []
+            for malt_name in calculated.get("fermentables", {}):
+                # Look for exact match first
                 malt_data = next(
-                    (f for f in inventory_data.get("fermentables", [])
-                     if malt_name.lower() in f["name"].lower()),
-                    {"name": malt_name, "_id": f"default-{malt_name.lower().replace(' ', '-')}"}
+                    (f for f in inventory_data.get("fermentables", []) 
+                     if f["name"].lower() == malt_name.lower()),
+                    None
                 )
-            
-            fermentables_data.append(malt_data)
+                # If no exact match, try partial match
+                if not malt_data:
+                    malt_data = next(
+                        (f for f in inventory_data.get("fermentables", [])
+                         if malt_name.lower() in f["name"].lower()),
+                        {"name": malt_name, "_id": f"default-{malt_name.lower().replace(' ', '-')}"}
+                    )
+                
+                fermentables_data.append(malt_data)
 
-        # Match hops with inventory data
-        hops_data = []
-        for hop in calculated.get("ibu", [[], []])[1]:
-            hop_name = hop["name"]
-            # Look for exact match first
-            hop_data = next(
-                (h for h in inventory_data.get("hops", [])
-                 if h["name"].lower() == hop_name.lower()),
-                None
-            )
-            # If no exact match, try partial match
-            if not hop_data:
+            # Match hops with inventory data
+            hops_data = []
+            for hop in calculated.get("ibu", [[], []])[1]:
+                hop_name = hop["name"]
+                # Look for exact match first
                 hop_data = next(
                     (h for h in inventory_data.get("hops", [])
-                     if hop_name.lower() in h["name"].lower()),
-                    {"name": hop_name, "_id": f"default-{hop_name.lower().replace(' ', '-')}"}
+                     if h["name"].lower() == hop_name.lower()),
+                    None
                 )
-            
-            hops_data.append(hop_data)
+                # If no exact match, try partial match
+                if not hop_data:
+                    hop_data = next(
+                        (h for h in inventory_data.get("hops", [])
+                         if hop_name.lower() in h["name"].lower()),
+                        {"name": hop_name, "_id": f"default-{hop_name.lower().replace(' ', '-')}"}
+                    )
+                
+                hops_data.append(hop_data)
 
-        # Match yeast with inventory data
-        yeast_type = draft.get("yeast", {}).get("type", "")
-        yeast_data = next(
-            (y for y in inventory_data.get("yeasts", [])
-             if y["name"].lower() == yeast_type.lower()),
-            next(
+            # Match yeast with inventory data
+            yeast_type = draft.get("yeast", {}).get("type", "")
+            yeast_data = next(
                 (y for y in inventory_data.get("yeasts", [])
-                 if yeast_type.lower() in y["name"].lower()),
-                {"name": yeast_type, "_id": f"default-{yeast_type.lower().replace(' ', '-')}"}
+                 if y["name"].lower() == yeast_type.lower()),
+                next(
+                    (y for y in inventory_data.get("yeasts", [])
+                     if yeast_type.lower() in y["name"].lower()),
+                    {"name": yeast_type, "_id": f"default-{yeast_type.lower().replace(' ', '-')}"}
+                )
             )
-        )
+        except Exception as e:
+            # If matching fails, use default values
+            print(f"Warning: Error matching ingredients: {str(e)}")
+            fermentables_data = []
+            hops_data = []
+            yeast_data = {"name": draft.get("yeast", {}).get("type", "Unknown"), "_id": "default-yeast"}
 
         # Update draft with matched ingredient data
         enriched_draft = {
@@ -370,30 +381,53 @@ def generate_xml():
             "ebc": calculate_ebc(enriched_draft, og_result["fermentables"], post_boil_volume)        
         }
 
-        # Generate XML
-        beer_xml = generate_beerxml(enriched_draft, calculated, equipment)
-        
-        # Create in-memory file
-        xml_file = io.BytesIO(beer_xml.encode('utf-8'))
-        
-        # Generate filename
-        recipe_name = enriched_draft.get('name', 'recipe').replace(' ', '_').lower()
-        filename = f"{recipe_name}.xml"
-        
-        return send_file(
-            xml_file,
-            mimetype='application/xml',
-            as_attachment=True,
-            download_name=filename
-        )
+        # Generate XML with error handling
+        try:
+            beer_xml = generate_beerxml(enriched_draft, calculated, equipment)
+            
+            # Check if the XML generated successfully and isn't too large
+            if not beer_xml:
+                raise ValueError("Failed to generate BeerXML content")
+                
+            xml_content = beer_xml.encode('utf-8')
+            xml_size = len(xml_content)
+            print(f"DEBUG: XML size: {xml_size} bytes")
+            
+            if xml_size > 10 * 1024 * 1024:  # More than 10MB
+                raise ValueError(f"Generated XML is too large: {xml_size} bytes")
+                
+            # Create in-memory file with proper chunking
+            xml_file = io.BytesIO(xml_content)
+            
+            # Generate filename
+            recipe_name = enriched_draft.get('name', 'recipe').replace(' ', '_').lower()
+            filename = f"{recipe_name}.xml"
+            
+            # Send file with explicit content length
+            response = send_file(
+                xml_file,
+                mimetype='application/xml',
+                as_attachment=True,
+                download_name=filename
+            )
+            
+            # Add Content-Length header
+            response.headers['Content-Length'] = xml_size
+            
+            return response
+            
+        except Exception as xml_error:
+            print(f"ERROR generating XML: {str(xml_error)}")
+            return jsonify({"error": f"Error generating XML: {str(xml_error)}"}), 500
+            
     except Exception as e:
         print(f"ERROR in generate-xml: {str(e)}")
-        print(f"DEBUG: Current draft state: {json.dumps(draft, indent=2)}")
-        print(f"DEBUG: Current calculated state: {json.dumps(calculated, indent=2)}")
+        if 'draft' in locals():
+            print(f"DEBUG: Current draft state: {json.dumps(draft, indent=2)}")
+        if 'calculated' in locals():
+            print(f"DEBUG: Current calculated state: {json.dumps(calculated, indent=2)}")
         return jsonify({
-            "error": str(e),
-            "draft": draft,
-            "calculated": calculated
+            "error": str(e)
         }), 500
 
 # 5️⃣ Iterativ diskussion med GPT
@@ -402,13 +436,89 @@ def discuss():
     data = request.json
     messages = data.get('messages', [])
     current_recipe = data.get('recipe')
+    inventory_data = data.get('inventory')
+    
+    # Detect if this is a request to update the recipe
+    is_update_request = any("uppdatera receptet" in msg.get('content', '').lower() 
+                          for msg in messages if msg.get('role') == 'user')
     
     # Lägg till receptdata i konversationen
-    messages.append({
-        "role": "system",
-        "content": f"Aktuellt recept: {current_recipe}"
-    })
+    if current_recipe:
+        messages.append({
+            "role": "system",
+            "content": f"Aktuellt recept: {current_recipe}"
+        })
     
+    # Lägg till info om tillgängliga ingredienser
+    if inventory_data and not any(msg.get('content', '').startswith("Tillgängliga ingredienser") for msg in messages if msg.get('role') == 'system'):
+        # Skapa en formaterad text med inventariet för bättre läsbarhet
+        inventory_text = "Tillgängliga ingredienser i användarens inventory:\n\n"
+        
+        # Lägg till malt
+        inventory_text += "MALT:\n"
+        for malt in inventory_data.get('fermentables', []):
+            inventory_text += f"- {malt['name']}: {malt.get('inventory', 'N/A')} kg, Färg: {malt.get('color', 'N/A')} SRM\n"
+        
+        # Lägg till humle
+        inventory_text += "\nHUMLE:\n"
+        for hop in inventory_data.get('hops', []):
+            inventory_text += f"- {hop['name']}: {hop.get('inventory', 'N/A')} g, Alfa: {hop.get('alpha', 'N/A')}%\n"
+        
+        # Lägg till jäst
+        inventory_text += "\nJÄST:\n"
+        for yeast in inventory_data.get('yeasts', []):
+            inventory_text += f"- {yeast['name']}: {yeast.get('inventory', 'N/A')} förpackningar\n"
+        
+        # Lägg till systemmeddelande med inventariet
+        messages.append({
+            "role": "system",
+            "content": inventory_text
+        })
+        
+        # Lägg till en instruktion till modellen om att beakta inventariet
+        messages.append({
+            "role": "system",
+            "content": "När du ger förslag på ändringar i receptet, föredra ingredienser som finns i användarens inventory. " +
+                      "Om användaren frågar om specifika ingredienser, kontrollera om de finns i inventory och ge relevant information."
+        })
+    
+    # Add special instruction for recipe update requests
+    if is_update_request and current_recipe:
+        # Add specific formatting instructions for recipe updates
+        messages.append({
+            "role": "system",
+            "content": """VIKTIGT: När du uppdaterar receptet, MÅSTE du inkludera den kompletta JSON-strukturen i ditt svar.
+        Placera JSON-objektet i ett kodblock med ```json och ``` runt.
+        Din JSON måste innehålla ALLA fält från originalreceptet, inklusive:
+        name, target_og, fermentables (med procent och potential_sg), hops, yeast.
+        Exempel på korrekt formaterat svar:
+        
+        Här är det uppdaterade receptet med de amerikanska humlesorterna:
+        
+        ```json
+        {
+          "name": "Receptnamn",
+          "target_og": 1.045,
+          "fermentables": {
+            "Maltnamn": [65, 1.036]
+          },
+          "hops": [
+            {
+              "name": "Humlenamn",
+              "alpha": 15.0,
+              "time": 60,
+              "ibu_contribution": 25
+            }
+          ],
+          "yeast": {
+            "type": "Jästnamn",
+            "amount": 1
+          }
+        }
+        ```"""
+        })
+    
+    # Generera svar från GPT
     response = continue_gpt_conversation(messages)
     return jsonify({"response": response})
 
