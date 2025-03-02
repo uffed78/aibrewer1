@@ -1,8 +1,8 @@
 # /backend/routes/function_c.py
 
 from flask import Blueprint, jsonify, request
-from backend.gpt_integration import continue_gpt_conversation, generate_recipe_with_gpt
-from routes.filters import filter_styles
+from aibrewer.backend.gpt_integration import continue_gpt_conversation, generate_recipe_with_gpt
+from aibrewer.backend.routes.filters import filter_styles
 import os
 import json
 # Fix imports to use absolute paths

@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 import json
 import os
-# Fix import to use absolute path
+# Fix imports to use absolute paths
 from aibrewer.backend.brewfather_api import get_inventory, get_all_inventory, get_inventory_item
 
 # Skapa Blueprint för funktion b
