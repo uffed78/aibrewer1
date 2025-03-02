@@ -1,1 +1,1 @@
-web: gunicorn aibrewer.backend.app:app
+web: gunicorn wsgi:app

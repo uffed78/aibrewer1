@@ -1,16 +1,17 @@
 import io
 import json
 from flask import Blueprint, jsonify, request, send_file
-from backend.gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation
-from backend.equipment_profiles import get_equipment_profile
-from backend.recipe_calculations import (
+# Fix imports to use absolute paths
+from aibrewer.backend.gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation
+from aibrewer.backend.equipment_profiles import get_equipment_profile
+from aibrewer.backend.recipe_calculations import (
     validate_recipe_draft,
     calculate_ibu,
     calculate_og,
     calculate_ebc,
     generate_beerxml
 )
-from backend.brewfather_api import get_all_inventory
+from aibrewer.backend.brewfather_api import get_all_inventory
 
 function_a_v2_bp = Blueprint('function_a_v2', __name__)
 

@@ -1,4 +1,4 @@
-from flask import Blueprint, send_from_directory
+from flask import Blueprint, send_from_directory, current_app
 import os
 
 frontend_bp = Blueprint('frontend', __name__)

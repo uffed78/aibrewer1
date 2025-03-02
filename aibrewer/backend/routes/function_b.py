@@ -1,7 +1,10 @@
 # /backend/routes/function_b.py
 
 from flask import Blueprint, jsonify, request
-from backend.brewfather_api import get_inventory, get_all_inventory, get_inventory_item
+import json
+import os
+# Fix import to use absolute path
+from aibrewer.backend.brewfather_api import get_inventory, get_all_inventory, get_inventory_item
 
 # Skapa Blueprint för funktion b
 function_b_bp = Blueprint('function_b', __name__)
