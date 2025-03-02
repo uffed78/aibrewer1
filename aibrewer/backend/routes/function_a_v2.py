@@ -89,6 +89,7 @@ def generate_draft():
         for ing in ingredients:
             formatted_ingredients += f"- {ing.get('name', '')} ({ing.get('category', '')})\n"
         
+        # Updated prompt with dry hop instructions
         gpt_prompt = f"""
         Skapa ett ölrecept i JSON-format för en {style} med följande ingredienser:
         {formatted_ingredients}
@@ -96,8 +97,13 @@ def generate_draft():
         Bryggverkets begränsningar:
         - Maximal kokvolym: {equipment['params']['boil_size']}L
         - Bryggverkets effektivitet: {equipment['params']['efficiency']}%
+        - Batch-storlek efter jäsning: {equipment['params']['batch_size']}L
 
         Se till att receptförslagen är stiltypiska enligt bjpc 2021.
+
+        VIKTIGT OM HUMLE:
+        - För kokhumle (time > 0): ange "ibu_contribution" (målvärde för IBU)
+        - För torrhumle (time = 0): ange istället "dry_hop_rate" i gram per liter
 
         Svara **endast** med ett JSON-objekt, inget annat. Inkludera följande fält:
         {{
@@ -108,10 +114,16 @@ def generate_draft():
             }},
             "hops": [
                 {{
-                    "name": "Humlenamn",
+                    "name": "Kokhumle",
                     "alpha": alpha_procent,
-                    "time": koktid,
+                    "time": koktid_minuter,
                     "ibu_contribution": önskad_ibu
+                }},
+                {{
+                    "name": "Torrhumle",
+                    "alpha": alpha_procent,
+                    "time": 0,
+                    "dry_hop_rate": gram_per_liter
                 }}
             ],
             "yeast": {{
@@ -126,19 +138,57 @@ def generate_draft():
         # Try to extract JSON from GPT response if it's not pure JSON
         draft_text = draft.strip()
         if not (draft_text.startswith("{") and draft_text.endswith("}")):
-            # Try to find JSON object in response
+            # Try to find JSON object in response - improved regex pattern
             import re
-            json_match = re.search(r'\{[\s\S]*\}', draft_text)
+            json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```|(\{[\s\S]*\})', draft_text)
             if json_match:
-                draft_text = json_match.group(0)
+                # Take the first matching group that contains valid JSON
+                match_content = json_match.group(1) if json_match.group(1) else json_match.group(2)
+                draft_text = match_content.strip()
             else:
+                # More detailed error for debugging
                 return jsonify({
-                    "error": "Could not extract valid JSON from GPT response",
+                    "error": "Could not extract valid JSON from GPT response. Please try again.",
                     "raw_response": draft
                 }), 400
+                
+        try:
+            draft_json = json.loads(draft_text)
+            print(f"Successfully parsed JSON: {json.dumps(draft_json, indent=2)[:200]}...")
+        except json.JSONDecodeError as e:
+            # Enhanced error with line and position info
+            return jsonify({
+                "error": f"Invalid JSON format: {str(e)}",
+                "at_position": e.pos,
+                "raw_response": draft_text
+            }), 400
+            
+        # Validate required fields
+        if "fermentables" not in draft_json:
+            return jsonify({"error": "Missing 'fermentables' in recipe"}), 400
+        if "hops" not in draft_json:
+            return jsonify({"error": "Missing 'hops' in recipe"}), 400
+        if "yeast" not in draft_json:
+            return jsonify({"error": "Missing 'yeast' in recipe"}), 400
         
-        draft_json = json.loads(draft_text)
-        
+        # Fix hops structure - ensure all have required fields
+        for hop in draft_json["hops"]:
+            if hop.get("time") == 0 and "dry_hop_rate" not in hop:
+                # Add default dry_hop_rate for dry hops without it
+                hop["dry_hop_rate"] = 2.0  # Default 2g/L
+                hop["ibu_contribution"] = 0  # No IBU from dry hops
+            elif hop.get("time", 0) > 0 and "ibu_contribution" not in hop:
+                # Add default IBU contribution for boil hops
+                hop["ibu_contribution"] = 5.0  # Default 5 IBU
+            
+            # Ensure all hops have other required fields
+            if "name" not in hop:
+                hop["name"] = "Unknown Hop"
+            if "alpha" not in hop:
+                hop["alpha"] = 10.0  # Default alpha %
+            if "time" not in hop:
+                hop["time"] = 15  # Default 15 minute addition
+
         # Spara originalformatet för fermentables för beräkningar
         calculation_fermentables = draft_json["fermentables"].copy()
         

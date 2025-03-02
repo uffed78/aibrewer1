@@ -4,14 +4,10 @@ from typing import Dict, Any
 def validate_recipe_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validerar ett receptutkast från GPT för att säkerställa att det är logiskt och körbart.
-    
-    Args:
-        draft (Dict): Ett receptutkast i JSON-format från GPT.
-        
-    Returns:
-        Dict: Ett resultatobjekt med "valid" (bool) och "message" (str).
+    Nu med stöd för både kokhumle (ibu_contribution) och torrhumle (dry_hop_rate).
     """
     errors = []
+    warnings = []
     
     # 1. Validera maltfördelning
     if "fermentables" not in draft:
@@ -28,28 +24,56 @@ def validate_recipe_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         if not math.isclose(total_percentage, 100, abs_tol=0.1):  # Tillåter liten avrundningsskillnad
             errors.append(f"Maltfördelningen summerar till {total_percentage}%, måste vara 100%.")
     
-    # 2. Validera humle
+    # 2. Validera humle - mer flexibel validering
     if "hops" not in draft:
         errors.append("Ingen humle angiven.")
     else:
-        for hop in draft["hops"]:
-            if "time" not in hop or "ibu_contribution" not in hop:
-                errors.append("Varje humle måste ha 'time' och 'ibu_contribution' angivna.")
+        for i, hop in enumerate(draft["hops"]):
+            if "name" not in hop:
+                warnings.append(f"Humle #{i+1} saknar namn.")
+                
+            if "time" not in hop:
+                warnings.append(f"Humle '{hop.get('name', f'#{i+1}')}' saknar koktid, antar 15 min.")
+                hop["time"] = 15
+                
+            if "alpha" not in hop:
+                warnings.append(f"Humle '{hop.get('name', f'#{i+1}')}' saknar alfasyrahalt, antar 10%.")
+                hop["alpha"] = 10.0
+                
+            # Kontrollera om det är en torrhumle eller en kokhumle
+            hop_time = hop.get("time", 0)
+            if hop_time == 0:  # Torrhumle
+                if "dry_hop_rate" not in hop:
+                    warnings.append(f"Torrhumle '{hop.get('name', f'#{i+1}')}' saknar dry_hop_rate, antar 2 g/L.")
+                    hop["dry_hop_rate"] = 2.0  # Default 2g/L
+                if "ibu_contribution" not in hop:
+                    hop["ibu_contribution"] = 0  # No IBU from dry hops
+            else:  # Kokhumle
+                if "ibu_contribution" not in hop:
+                    warnings.append(f"Kokhumle '{hop.get('name', f'#{i+1}')}' saknar IBU-bidrag, antar 5 IBU.")
+                    hop["ibu_contribution"] = 5.0
     
     # 3. Validera jäst
     if "yeast" not in draft:
         errors.append("Ingen jäst angiven.")
-    elif "type" not in draft["yeast"] or "amount" not in draft["yeast"]:
-        errors.append("Jäst måste ha 'type' och 'amount' angivna.")
+    elif "type" not in draft["yeast"]:
+        warnings.append("Jäst saknar 'type', använder standardvärde.")
+        draft["yeast"]["type"] = "Ale Yeast"
+    elif "amount" not in draft["yeast"]:
+        warnings.append("Jäst saknar 'amount', antar 1 paket.")
+        draft["yeast"]["amount"] = 1
     
+    if warnings:
+        print("RECIPE WARNINGS: " + "; ".join(warnings))
+        
     return {
         "valid": len(errors) == 0,
-        "message": "; ".join(errors) if errors else "Receptutkastet är giltigt."
+        "message": "; ".join(errors) if errors else "Receptutkastet är giltigt.",
+        "warnings": warnings
     }
 
-
 def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, Any]:
-    """
+    """ 
     Beräknar OG och maltvikter baserat på målvärden och bryggverkets parametrar.
     """
     # Debug equipment parameters
@@ -62,23 +86,23 @@ def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, 
     print("DEBUG Malt info:")
     for malt, (percentage, potential_sg) in draft.get("fermentables", {}).items():
         print(f"  - {malt}: {percentage}%, SG={potential_sg}")
-    
+          
     target_og = draft.get("target_og", 1.050)
     boil_size = max(0.001, equipment.get('params', {}).get('boil_size', 20))
     evap_rate = max(0, min(100, equipment.get('params', {}).get('evap_rate', 10))) / 100.0
     boil_time = max(0.1, equipment.get('params', {}).get('boil_time', 60))
     cooling_factor = 0.96
     efficiency = max(0.01, equipment.get("params", {}).get("efficiency", 75) / 100.0)
-
+    
     # 1. Beräkna post-boil volume
     boil_off_hours = boil_time / 60.0
     boiled_off = boil_size * evap_rate * boil_off_hours
     post_boil_volume_liters = max(0.001, (boil_size - boiled_off) * cooling_factor)
     post_boil_volume_gallons = post_boil_volume_liters * 0.264172
-
+    
     # 2. Beräkna required GP (Gravity Points)
     required_gp = (target_og - 1) * post_boil_volume_gallons * 1000
-
+    
     # 3. Beräkna maltvikt med exakt procentandelar
     fermentables = {}
     total_weight = 0.0
@@ -94,14 +118,14 @@ def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, 
         malt_weight_lbs = (percentage / 100.0) * (required_gp / (ppg * efficiency))
         temp_weights[malt] = malt_weight_lbs
         total_weight += malt_weight_lbs
-
+        
     # Justera vikterna för att matcha exakta procentandelar
     total_weight = max(0.001, total_weight)  # Ensure non-zero total weight
     for malt, (percentage, _) in draft["fermentables"].items():
         target_weight = (percentage / 100.0) * total_weight
         adjusted_weight_kg = (target_weight / 2.20462)  # Convert to kg
         fermentables[malt] = round(adjusted_weight_kg, 2)
-
+        
     # 4. Beräkna faktisk OG baserat på justerade vikter
     total_gp = 0.0
     for malt, (_, potential_sg) in draft["fermentables"].items():
@@ -119,7 +143,7 @@ def calculate_og(draft: Dict[str, Any], equipment: Dict[str, Any]) -> Dict[str, 
         "og": round(actual_og, 3),
         "fermentables": fermentables
     }
-
+    
 def calculate_malt_weight(percentage, target_og, post_boil_volume, efficiency, potential_sg):
     """Hjälpfunktion för att beräkna maltvikt"""
     required_points = (target_og - 1) * post_boil_volume
@@ -138,68 +162,89 @@ def calculate_ibu(draft: Dict[str, Any], equipment: Dict[str, Any], post_boil_vo
         print("WARNING: Post-boil volume is zero or negative. Using minimum safe value.")
         post_boil_volume = 0.001  # Minimum safe value to avoid division by zero
     
+    # Get batch size for dry hopping calculations
+    batch_size = max(0.001, equipment.get('params', {}).get('batch_size', post_boil_volume))
+    
     total_ibu = 0.0
     post_boil_gallons = post_boil_volume * 0.264172  # Liter → gallon
     hops_with_amounts = []
     
     # Debug hop info
-    print("DEBUG Hop info:")
+    print("DEBUG Hop info:")    
     for i, hop in enumerate(draft.get("hops", [])):
         print(f"  - Hop {i+1}: {hop.get('name', 'Unknown')}, Alpha: {hop.get('alpha', 'N/A')}%, Time: {hop.get('time', 'N/A')}min")
 
     for hop in draft["hops"]:
-        # Ensure alpha, time and target_ibu are valid numbers
+        # Common hop parameters
+        hop_name = hop.get("name", "Unknown Hop")
         alpha = max(0.0001, hop.get("alpha", 0) / 100.0)  # Ensure non-zero
-        time = max(0.1, hop.get("time", 0))
-        target_ibu = max(0, hop.get("ibu_contribution", 0))
+        time = hop.get("time", 0)
         
-        # Print detailed debug info
-        print(f"\nCalculating for {hop.get('name', 'Unknown Hop')}:")
+        print(f"\nCalculating for {hop_name}:")
+        target_ibu = max(0, hop.get("ibu_contribution", 0))
         print(f"  Alpha: {alpha:.4f} (decimal), Time: {time} min, Target IBU: {target_ibu}")
         
-        # Korrigerad Tinseth utilization formel
-        # Bigness factor = 1.65 * 0.000125^(wort gravity - 1)
-        bigness_factor = 1.65 * pow(0.000125, 0.050)  # Använder standard 1.050 OG här
-        
-        # Boil Time factor = (1 - e^(-0.04 * time)) / 4.15
-        boil_time_factor = (1 - math.exp(-0.04 * time)) / 4.15
-        
-        # Total utilization
-        utilization = bigness_factor * boil_time_factor
-        
-        print(f"  Utilization factors - Bigness: {bigness_factor:.4f}, Boil time: {boil_time_factor:.4f}")
-        print(f"  Total utilization: {utilization:.4f} ({utilization*100:.1f}%)")
-        
-        # Prevent division by zero in amount calculation
-        if alpha * utilization == 0:
-            print("  WARNING: Alpha * utilization is zero! Using minimum value.")
-            alpha = max(0.001, alpha)
-            utilization = max(0.001, utilization)
-        
-        # Beräkna mängd humle i ounces (with safeguards against division by zero)
-        amount_oz = (target_ibu * post_boil_gallons) / (alpha * 7489.2 * utilization)  # 7489.2 är en konstant för metrisk konvertering
-        amount_g = amount_oz * 28.3495  # Omvandla till gram
-
-        print(f"  Calculated amount: {amount_g:.1f}g ({amount_oz:.2f}oz)")
-
-        hop_data = {
-            "name": hop["name"],
-            "alpha": hop["alpha"],
-            "time": time,
-            "ibu_contribution": target_ibu,
-            "calculated_amount": round(amount_g, 1),
-            "utilization": round(utilization * 100, 1)  # Procent
-        }
-        
+        if time > 0:  # This is a boil addition
+            print(f"  Boil addition - Alpha: {alpha:.4f}, Time: {time} min, Target IBU: {target_ibu}")
+            
+            # Tinseth formula calculation
+            # Bigness factor = 1.65 * 0.000125^(wort gravity - 1)
+            bigness_factor = 1.65 * pow(0.000125, 0.050)  # Using standard 1.050 OG
+            boil_time_factor = (1 - math.exp(-0.04 * time)) / 4.15
+            utilization = bigness_factor * boil_time_factor  # Total utilization
+            
+            # Prevent division by zero
+            if alpha * utilization == 0:
+                alpha = max(0.001, alpha)
+                utilization = max(0.001, utilization)
+                
+            print(f"  Bigness factor: {bigness_factor:.4f}, Boil time factor: {boil_time_factor:.4f}")
+            print(f"  Utilization: {utilization:.4f} ({utilization*100:.1f}%)")
+            
+            # Calculate hop amount based on target IBU (with safeguards against division by zero)
+            amount_oz = (target_ibu * post_boil_gallons) / (alpha * 7489.2 * utilization)  # 7489.2 är en konstant för metrisk konvertering
+            amount_g = amount_oz * 28.3495  # Omvandla till gram
+            
+            hop_data = {
+                "name": hop_name,
+                "alpha": hop.get("alpha"),
+                "time": time,
+                "ibu_contribution": target_ibu,
+                "calculated_amount": round(amount_g, 1),
+                "utilization": round(utilization * 100, 1),  # Percent
+                "use": "Boil"
+            }
+            print(f"  Calculated amount: {amount_g:.1f}g ({amount_oz:.2f}oz)")
+            
+            total_ibu += target_ibu
+            
+        else:  # This is a dry hop addition (time=0)
+            # Get dry hop rate in g/L
+            dry_hop_rate = max(0, hop.get("dry_hop_rate", 0))
+            print(f"  Dry hop addition - Alpha: {alpha:.4f}, Rate: {dry_hop_rate} g/L")
+            
+            # Calculate amount based on batch size and g/L rate
+            amount_g = batch_size * dry_hop_rate
+            
+            hop_data = {
+                "name": hop_name,
+                "alpha": hop.get("alpha"),
+                "time": 0,  # Dry hop
+                "dry_hop_rate": dry_hop_rate,
+                "calculated_amount": round(amount_g, 1),
+                "utilization": 0,  # No IBU contribution
+                "use": "Dry Hop",
+                "ibu_contribution": 0  # No IBU from dry hopping
+            }
+            print(f"  Calculated amount: {hop_data['calculated_amount']:.1f}g")
+            
         hops_with_amounts.append(hop_data)
-        total_ibu += target_ibu
 
     # Ensure we never return NaN or infinity values
-    total_ibu = max(0, min(150, total_ibu))  # Cap between 0 and 150 IBUs
+    total_ibu = max(0, min(150, total_ibu))  # Cap between 0 and 150 IBUs    
     print(f"\nFinal IBU calculation: {total_ibu:.1f}")
     
     return total_ibu, hops_with_amounts
-
 
 def calculate_ebc(draft: Dict[str, Any], fermentables: Dict[str, float], post_boil_volume: float) -> float:
     """
@@ -215,7 +260,7 @@ def calculate_ebc(draft: Dict[str, Any], fermentables: Dict[str, float], post_bo
 
     post_boil_gallons = post_boil_volume * 0.264172
     total_mcu = 0.0
-
+    
     print("\nMalt Color Calculations:")
     for malt, weight_kg in fermentables.items():
         # Hämta SRM-värde från Brewfather metadata
@@ -225,7 +270,7 @@ def calculate_ebc(draft: Dict[str, Any], fermentables: Dict[str, float], post_bo
         # Beräkna MCU direkt från SRM (skippar Lovibond-konvertering)
         mcu = (srm_color * weight_lbs) / post_boil_gallons
         total_mcu += mcu
-
+        
         print(f"\n{malt}:")
         print(f"  Weight: {weight_kg:.2f}kg ({weight_lbs:.2f}lbs)")
         print(f"  Color: {srm_color} SRM")
@@ -270,7 +315,7 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
         total_ibu = ensure_float(total_ibu[0])
     else:
         total_ibu = ensure_float(total_ibu)
-    
+        
     og = ensure_float(calculated.get("og"))
     ebc = ensure_float(calculated.get("ebc"))
 
@@ -340,7 +385,7 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
         hop_alpha = ensure_float(hop.get("alpha", 0.0))
         hop_time = ensure_float(hop.get("time", 0.0))
         hop_amount = ensure_float(hop.get("calculated_amount", 0.0)) / 1000.0  # Convert to kg
-        
+        hop_use = "Dry Hop" if hop_time == 0 else "Boil"
         hop_metadata = next((h for h in draft.get("hops", []) if h.get("name") == hop_name), {})
         
         xml_parts.extend([
@@ -350,7 +395,7 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
             '                <VERSION>1</VERSION>',
             f'                <ALPHA>{hop_alpha}</ALPHA>',
             f'                <AMOUNT>{hop_amount}</AMOUNT>',
-            f'                <USE>{hop_metadata.get("use", "Boil")}</USE>',
+            f'                <USE>{hop_use}</USE>',
             f'                <TIME>{hop_time}</TIME>',
             f'                <FORM>{hop_metadata.get("form", "Pellet")}</FORM>',
             '            </HOP>'
