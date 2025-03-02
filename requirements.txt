@@ -1,5 +1,5 @@
 # Web Framework
-flask==2.0.1
+flask>=2.2.0
 flask-cors==3.0.10
 
 # HTTP and API 
@@ -12,7 +12,7 @@ python-dotenv==0.19.0
 openai==0.27.0
 
 # Additional dependencies
-Werkzeug>=2.0.0
+Werkzeug>=2.2.0
 MarkupSafe>=2.0.0
 itsdangerous>=2.0.0
 Jinja2>=3.0.0
