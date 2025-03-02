@@ -135,33 +135,39 @@ def generate_draft():
 
         draft = generate_recipe_with_gpt(gpt_prompt)
         
-        # Try to extract JSON from GPT response if it's not pure JSON
-        draft_text = draft.strip()
-        if not (draft_text.startswith("{") and draft_text.endswith("}")):
-            # Try to find JSON object in response - improved regex pattern
-            import re
-            json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```|(\{[\s\S]*\})', draft_text)
-            if json_match:
-                # Take the first matching group that contains valid JSON
-                match_content = json_match.group(1) if json_match.group(1) else json_match.group(2)
-                draft_text = match_content.strip()
-            else:
-                # More detailed error for debugging
+        # Check if draft is already a dictionary or a string
+        if isinstance(draft, dict):
+            # If it's already a dictionary, use it directly
+            draft_json = draft
+            print("Draft is already a dictionary, skipping JSON parsing")
+        else:
+            # Try to extract JSON from GPT response if it's a string
+            draft_text = draft.strip()
+            if not (draft_text.startswith("{") and draft_text.endswith("}")):
+                # Try to find JSON object in response - improved regex pattern
+                import re
+                json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```|(\{[\s\S]*\})', draft_text)
+                if json_match:
+                    # Take the first matching group that contains valid JSON
+                    match_content = json_match.group(1) if json_match.group(1) else json_match.group(2)
+                    draft_text = match_content.strip()
+                else:
+                    # More detailed error for debugging
+                    return jsonify({
+                        "error": "Could not extract valid JSON from GPT response. Please try again.",
+                        "raw_response": draft
+                    }), 400
+                    
+            try:
+                draft_json = json.loads(draft_text)
+                print(f"Successfully parsed JSON: {json.dumps(draft_json, indent=2)[:200]}...")
+            except json.JSONDecodeError as e:
+                # Enhanced error with line and position info
                 return jsonify({
-                    "error": "Could not extract valid JSON from GPT response. Please try again.",
-                    "raw_response": draft
+                    "error": f"Invalid JSON format: {str(e)}",
+                    "at_position": e.pos,
+                    "raw_response": draft_text
                 }), 400
-                
-        try:
-            draft_json = json.loads(draft_text)
-            print(f"Successfully parsed JSON: {json.dumps(draft_json, indent=2)[:200]}...")
-        except json.JSONDecodeError as e:
-            # Enhanced error with line and position info
-            return jsonify({
-                "error": f"Invalid JSON format: {str(e)}",
-                "at_position": e.pos,
-                "raw_response": draft_text
-            }), 400
             
         # Validate required fields
         if "fermentables" not in draft_json:
@@ -316,8 +322,12 @@ def generate_xml():
         print("DEBUG: Received draft:", json.dumps(draft, indent=2))
         print("DEBUG: Received calculated:", json.dumps(calculated, indent=2))
 
-        # Get equipment profile
+        # Get equipment profile and pass the name explicitly
+        profile = data.get('profile', "Grainfather G30")
         equipment = get_equipment_profile(profile)
+        
+        # Add the name to the equipment dictionary so it's available in generate_beerxml
+        equipment["name"] = profile
 
         # Calculate post-boil volume
         post_boil_volume = (equipment["params"]["boil_size"] - 

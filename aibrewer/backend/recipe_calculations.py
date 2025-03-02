@@ -442,6 +442,31 @@ def generate_beerxml(draft: Dict[str, Any], calculated: Dict[str, Any], equipmen
             '        </MASH>'
         ])
 
+    # Add equipment profile section - fix the name lookup
+    equipment_name = equipment.get("name", "Unknown Equipment")
+    if not equipment_name or equipment_name == "Unknown Equipment":
+        # Try to get it from the XML template if available
+        xml_template = equipment.get("xml", "")
+        import re
+        name_match = re.search(r'<NAME>(.*?)</NAME>', xml_template)
+        if name_match:
+            equipment_name = name_match.group(1).replace('&#32;', ' ')
+    
+    xml_parts.extend([
+        '        <EQUIPMENT>',
+        f'            <NAME>{equipment_name}</NAME>',
+        '            <VERSION>1</VERSION>',
+        f'            <BOIL_SIZE>{ensure_float(equipment.get("params", {}).get("boil_size", 25.0))}</BOIL_SIZE>',
+        f'            <BATCH_SIZE>{ensure_float(equipment.get("params", {}).get("batch_size", 20.0))}</BATCH_SIZE>',
+        f'            <TRUB_CHILLER_LOSS>{ensure_float(equipment.get("params", {}).get("trub_chiller_loss", 1.0))}</TRUB_CHILLER_LOSS>',
+        f'            <LAUTER_DEADSPACE>{ensure_float(equipment.get("params", {}).get("lauter_deadspace", 3.5))}</LAUTER_DEADSPACE>',
+        f'            <BOIL_TIME>{ensure_float(equipment.get("params", {}).get("boil_time", 60.0))}</BOIL_TIME>',
+        f'            <HOP_UTILIZATION>{ensure_float(equipment.get("params", {}).get("hop_utilization", 100.0))}</HOP_UTILIZATION>',
+        f'            <EVAP_RATE>{ensure_float(equipment.get("params", {}).get("evap_rate", 10.0))}</EVAP_RATE>',
+        f'            <CALC_BOIL_VOLUME>{str(equipment.get("params", {}).get("calc_boil_volume", True)).lower()}</CALC_BOIL_VOLUME>',
+        '        </EQUIPMENT>'
+    ])
+
     # Close the XML structure
     xml_parts.extend([
         '    </RECIPE>',
