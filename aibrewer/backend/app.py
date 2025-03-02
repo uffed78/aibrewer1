@@ -41,6 +41,8 @@ def serve_frontend():
 def serve_static(path):
     return send_from_directory('../frontend', path)
 
+# Modify the bottom part to better handle production environment:
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
-    app.run(host='0.0.0.0', port=port)
+    debug_mode = os.environ.get('FLASK_ENV') == 'development'
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
