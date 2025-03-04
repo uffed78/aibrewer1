@@ -1,118 +1,105 @@
 import os
-from dotenv import load_dotenv
+import json
 from openai import OpenAI
+from os import environ
+from dotenv import load_dotenv
+from .brewer_personalities import get_personality  # Use relative import
 
 # Ladda miljövariabler från .env
 load_dotenv()
 
-# Ställ in OpenRouter API-konfiguration
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+# Initialize the OpenAI client with the API key
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def generate_recipe_with_gpt(user_prompt):
+def generate_recipe_with_gpt(prompt, personality_id="traditionalist"):
     """
-    Genererar ett ölrecept baserat på användarens prompt med OpenRouter.
+    Generates a beer recipe using OpenAI GPT API based on the provided prompt.
+    
+    Args:
+        prompt (str): The prompt to send to GPT for recipe generation.
+        personality_id (str): Optional personality to use for the generation.
+        
+    Returns:
+        str: The generated recipe as a string or JSON object.
     """
     try:
-        if not user_prompt or user_prompt.strip() == "":
-            print("DEBUG: user_prompt är tomt! Avbryter anrop till OpenRouter.")
-            return {"error": "User prompt is empty"}
-
-        print("DEBUG: Skickar följande prompt till GPT:")
-        print(user_prompt)
-
+        # Get personality profile if provided
+        personality = get_personality(personality_id)
+        system_content = personality["system_prompt"] if personality else "You are a master brewer with extensive experience creating high-quality beer recipes."
+        
+        # Use the client-based API approach
         response = client.chat.completions.create(
-            extra_headers={
-                "HTTP-Referer": "<YOUR_SITE_URL>",
-                "X-Title": "<YOUR_SITE_NAME>",
-            },
-            model="anthropic/claude-3.5-haiku-20241022:beta",
+            model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Du är en expert på ölbryggning och receptutveckling."},
-                {"role": "user", "content": user_prompt}
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": prompt}
             ],
-            max_tokens=5000,
-            temperature=0.7
+            temperature=0.7,
+            max_tokens=1500
         )
-
-        print("DEBUG: OpenRouter Response:", response)
-
-        choices = response.choices
-        if choices and len(choices) > 0:
-            return choices[0].message.content.strip()
-        else:
-            return {"error": "No content returned from GPT."}
-
+        
+        # Extract the content from the response
+        recipe_text = response.choices[0].message.content
+        
+        # Try to parse as JSON if possible
+        try:
+            return json.loads(recipe_text)
+        except:
+            # Return as plain text if not valid JSON
+            return recipe_text
+            
     except Exception as e:
-        print(f"Error in generate_recipe_with_gpt: {str(e)}")
+        print(f"Error generating recipe with GPT: {str(e)}")
         return {"error": str(e)}
 
-
-
-def continue_gpt_conversation(messages):
+def continue_gpt_conversation(messages, personality_id="traditionalist"):
     """
-    Fortsätter konversationen med GPT via OpenRouter och ser till att kontexten bevaras.
+    Continue a conversation with GPT based on previous messages.
     """
     try:
-        if not messages:
-            return "Jag har ingen tidigare kontext att fortsätta ifrån."
-
-        # Lägg till en system-prompt för att ge GPT rätt kontext
-        system_prompt = {
-            "role": "system",
-            "content": "Du är en öl-expert och bryggmästare. Användaren har delat sitt inventory, valt en ölstil och fått ett receptförslag. \
-                        Fortsätt samtalet baserat på tidigare meddelanden och hjälp användaren att förbättra receptet."
-        }
-
-        # Se till att systemmeddelandet är med i varje anrop
-        if not any(msg["role"] == "system" for msg in messages):
-            messages.insert(0, system_prompt)
-
-        print("📡 Meddelanden som skickas till GPT:", messages)
-
+        # Get personality with debug info
+        personality = get_personality(personality_id)
+        print(f"DEBUG: Using personality {personality_id}: {personality['name']}")
+        system_prompt = personality["system_prompt"]
+        
+        # Create a fresh message array starting with the personality
+        full_messages = [{"role": "system", "content": system_prompt}]
+        
+        # Then add user messages
+        full_messages.extend(messages)
+        
+        print(f"DEBUG: First system message: {full_messages[0]['content'][:50]}...")
+        
+        # Make the API call
         response = client.chat.completions.create(
-            extra_headers={
-                "HTTP-Referer": "<YOUR_SITE_URL>",
-                "X-Title": "<YOUR_SITE_NAME>",
-            },
-            model="anthropic/claude-3.5-haiku-20241022:beta",
-            messages=messages,
-            max_tokens=5000,
-            temperature=0.7
+            model="gpt-3.5-turbo",
+            messages=full_messages,
+            temperature=0.7,
+            max_tokens=1500
         )
-
-        print("📡 GPT Raw Response:", response)
-
-        return response.choices[0].message.content.strip()
+        
+        return response.choices[0].message.content
+            
     except Exception as e:
-        print(f"❌ Fel i continue_gpt_conversation: {str(e)}")
+        print(f"Error continuing conversation with GPT: {str(e)}")
         return {"error": str(e)}
 
 def send_full_inventory_to_gpt(full_inventory):
     """
-    Skickar hela inventariedatan till GPT via OpenRouter.
+    Skickar hela inventariedatan till GPT.
     """
     try:
         response = client.chat.completions.create(
-            extra_headers={
-                "HTTP-Referer": "<YOUR_SITE_URL>",
-                "X-Title": "<YOUR_SITE_NAME>",
-            },
-            model="anthropic/claude-3.5-haiku-20241022:beta",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Du är en expert på ölbryggning och BeerXML-recept."},
                 {"role": "user", "content": str(full_inventory)}
             ],
-            max_tokens=5000,
+            max_tokens=1500,
             temperature=0.7
         )
 
-        if response.choices and len(response.choices) > 0:
-            return response.choices[0].message.content.strip()
-        else:
-            return {"error": "No valid response from GPT."}
+        return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error in send_full_inventory_to_gpt: {str(e)}")
         return {"error": str(e)}

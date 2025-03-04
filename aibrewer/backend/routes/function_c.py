@@ -1,10 +1,12 @@
 # /backend/routes/function_c.py
 
 from flask import Blueprint, jsonify, request
-from backend.gpt_integration import continue_gpt_conversation, generate_recipe_with_gpt
-from routes.filters import filter_styles
+from ..gpt_integration import continue_gpt_conversation, generate_recipe_with_gpt
+from .filters import filter_styles
 import os
 import json
+# Fix imports to use relative paths
+from ..brewfather_api import get_recipes, get_all_recipes, get_recipe_by_id
 
 # Skapa Blueprint för funktion c
 function_c_bp = Blueprint('function_c', __name__)

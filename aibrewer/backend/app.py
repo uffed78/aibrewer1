@@ -3,14 +3,14 @@ import os
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 
-# Lägg till roten för projektet i sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add the project root to sys.path to make local imports work
+sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
-
-from routes.frontend import frontend_bp
-from routes.function_b import function_b_bp
-from routes.function_c import function_c_bp
-from routes.function_a_v2 import function_a_v2_bp
+# Now use relative imports for the blueprints
+from aibrewer.backend.routes.frontend import frontend_bp
+from aibrewer.backend.routes.function_b import function_b_bp
+from aibrewer.backend.routes.function_c import function_c_bp
+from aibrewer.backend.routes.function_a_v2 import function_a_v2_bp
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})

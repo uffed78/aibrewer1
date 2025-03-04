@@ -1,38 +1,75 @@
 import io
 import json
 from flask import Blueprint, jsonify, request, send_file
-from backend.gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation
-from backend.equipment_profiles import get_equipment_profile
-from backend.recipe_calculations import (
+# Fix imports to use relative paths
+from ..gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation
+from ..equipment_profiles import get_equipment_profile
+from ..recipe_calculations import (
     validate_recipe_draft,
     calculate_ibu,
     calculate_og,
     calculate_ebc,
     generate_beerxml
 )
-from backend.brewfather_api import get_all_inventory
+from ..brewfather_api import get_all_inventory
+from ..brewer_personalities import BREWER_PERSONALITIES
 
 function_a_v2_bp = Blueprint('function_a_v2', __name__)
 
-# 1️⃣ GPT Föreslår ölstilar
+# Ny endpoint för att hämta alla tillgängliga bryggarpersonligheter
+@function_a_v2_bp.route('/personalities', methods=['GET'])
+def get_personalities():
+    """Returnerar alla tillgängliga bryggarpersonligheter"""
+    personalities_data = {}
+    
+    for personality_id, data in BREWER_PERSONALITIES.items():
+        personalities_data[personality_id] = {
+            "name": data["name"],
+            "icon": data["icon"],
+            "description": data["description"]
+        }
+    
+    return jsonify(personalities_data)
+
+# 1️⃣ GPT Föreslår ölstilar - uppdaterad för att hantera personlighetsval
 @function_a_v2_bp.route('/suggest-styles', methods=['POST'])
 def suggest_styles():
     data = request.json
     ingredients = data.get('ingredients', [])
-    profile = data.get('profile', "Grainfather G30")
+    profile_name = data.get('profile', 'Grainfather G30')
+    personality_id = data.get('personality', 'traditionalist')  # Default personlighet
     
-    equipment = get_equipment_profile(profile)
-    gpt_prompt = f"""
-    Föreslå 3-5 ölstilar som kan bryggas med dessa ingredienser:
-    {ingredients}
+    # Skapa prompt baserat på ingredienser
+    ingredient_prompt = "Tillgängliga ingredienser:\n"
+    for item in ingredients:
+        # Safe access to dictionary keys with defaults
+        name = item.get('name', 'Unknown')
+        category = item.get('category', 'Unknown')
+        
+        # Only include amount and unit if they exist
+        if 'amount' in item and 'unit' in item:
+            ingredient_prompt += f"- {name} ({category}, {item['amount']} {item['unit']})\n"
+        else:
+            ingredient_prompt += f"- {name} ({category})\n"
     
-    Utrustningsbegränsningar:
-    - Max kokvolym: {equipment['params']['boil_size']}L
-    - Effektivitet: {equipment['params']['efficiency']}%
+    equipment = get_equipment_profile(profile_name)
+    
+    prompt = f"""
+    {ingredient_prompt}
+    
+    Utifrån de listade ingredienserna, föreslå 3-5 olika ölstilar som skulle passa att brygga.
+    För varje stil, ge en kort motivering om varför den skulle passa bra med de givna ingredienserna.
+    Var kreativ men realistisk. Beakta mängderna av ingredienser som finns tillgängliga.
+    
+    Utrustning: {profile_name}
+    Batch-storlek: {equipment.get('params', {}).get('batch_size', 20)} liter
+    Effektivitet: {equipment.get('params', {}).get('efficiency', 70)}%
     """
     
-    styles = generate_recipe_with_gpt(gpt_prompt)
-    return jsonify({"styles": styles})
+    # Update to pass the personality_id parameter
+    styles_text = generate_recipe_with_gpt(prompt, personality_id)
+    
+    return jsonify({"styles": styles_text})
 
 def srm_to_lovibond(srm: float) -> float:
     """
@@ -49,6 +86,7 @@ def generate_draft():
     style = data.get('style', "")
     ingredients = data.get('ingredients', [])
     profile = data.get('profile', "Grainfather G30")
+    personality_id = data.get('personality', 'traditionalist')  # Add this line
     
     # Get API credentials
     api_id = data.get('apiId')
@@ -133,7 +171,8 @@ def generate_draft():
         }}
         """
 
-        draft = generate_recipe_with_gpt(gpt_prompt)
+        # Update to pass the personality_id parameter
+        draft = generate_recipe_with_gpt(gpt_prompt, personality_id)
         
         # Check if draft is already a dictionary or a string
         if isinstance(draft, dict):
@@ -490,96 +529,66 @@ def generate_xml():
             "error": str(e)
         }), 500
 
-# 5️⃣ Iterativ diskussion med GPT
+# 5️⃣ Iterativ diskussion med GPT - uppdaterad för personlighetsval
 @function_a_v2_bp.route('/discuss', methods=['POST'])
 def discuss():
     data = request.json
     messages = data.get('messages', [])
     current_recipe = data.get('recipe')
     inventory_data = data.get('inventory')
+    personality_id = data.get('personality', 'traditionalist')  # Default personlighet
     
-    # Detect if this is a request to update the recipe
-    is_update_request = any("uppdatera receptet" in msg.get('content', '').lower() 
-                          for msg in messages if msg.get('role') == 'user')
+    print(f"DEBUG: Using personality: {personality_id}")
+    
+    # Skapa en ren meddelandearray utan tidigare systemmeddelanden
+    user_messages = [msg for msg in messages if msg.get('role') != 'system']
+    
+    # Starta en ny array för systemmeddelanden
+    system_messages = []
     
     # Lägg till receptdata i konversationen
     if current_recipe:
-        messages.append({
+        system_messages.append({
             "role": "system",
             "content": f"Aktuellt recept: {current_recipe}"
         })
     
-    # Lägg till info om tillgängliga ingredienser
-    if inventory_data and not any(msg.get('content', '').startswith("Tillgängliga ingredienser") for msg in messages if msg.get('role') == 'system'):
-        # Skapa en formaterad text med inventariet för bättre läsbarhet
+    # Lägg till info om tillgängliga ingredienser om de finns
+    if inventory_data:
         inventory_text = "Tillgängliga ingredienser i användarens inventory:\n\n"
-        
-        # Lägg till malt
-        inventory_text += "MALT:\n"
-        for malt in inventory_data.get('fermentables', []):
-            inventory_text += f"- {malt['name']}: {malt.get('inventory', 'N/A')} kg, Färg: {malt.get('color', 'N/A')} SRM\n"
-        
-        # Lägg till humle
-        inventory_text += "\nHUMLE:\n"
-        for hop in inventory_data.get('hops', []):
-            inventory_text += f"- {hop['name']}: {hop.get('inventory', 'N/A')} g, Alfa: {hop.get('alpha', 'N/A')}%\n"
-        
-        # Lägg till jäst
-        inventory_text += "\nJÄST:\n"
-        for yeast in inventory_data.get('yeasts', []):
-            inventory_text += f"- {yeast['name']}: {yeast.get('inventory', 'N/A')} förpackningar\n"
-        
-        # Lägg till systemmeddelande med inventariet
-        messages.append({
+        inventory_text += "MALT:\n" + "\n".join([f"- {m['name']}: {m.get('inventory', 'N/A')} kg, Färg: {m.get('color', 'N/A')} SRM" 
+                                                 for m in inventory_data.get('fermentables', [])])
+        inventory_text += "\n\nHUMLE:\n" + "\n".join([f"- {h['name']}: {h.get('inventory', 'N/A')} g, Alfa: {h.get('alpha', 'N/A')}%" 
+                                                      for h in inventory_data.get('hops', [])])
+        inventory_text += "\n\nJÄST:\n" + "\n".join([f"- {y['name']}: {y.get('inventory', 'N/A')} förpackningar" 
+                                                      for y in inventory_data.get('yeasts', [])])
+        system_messages.append({
             "role": "system",
             "content": inventory_text
         })
-        
-        # Lägg till en instruktion till modellen om att beakta inventariet
-        messages.append({
+        system_messages.append({
             "role": "system",
-            "content": "När du ger förslag på ändringar i receptet, föredra ingredienser som finns i användarens inventory. " +
-                      "Om användaren frågar om specifika ingredienser, kontrollera om de finns i inventory och ge relevant information."
+            "content": "När du ger receptförslag, beakta ingredienserna i inventariet."
         })
     
-    # Add special instruction for recipe update requests
+    # Check if this is a recipe update request
+    is_update_request = any("uppdatera receptet" in msg.get('content', '').lower() 
+                          for msg in user_messages if msg.get('role') == 'user')
+                          
     if is_update_request and current_recipe:
-        # Add specific formatting instructions for recipe updates
-        messages.append({
+        system_messages.append({
             "role": "system",
             "content": """VIKTIGT: När du uppdaterar receptet, MÅSTE du inkludera den kompletta JSON-strukturen i ditt svar.
-        Placera JSON-objektet i ett kodblock med ```json och ``` runt.
-        Din JSON måste innehålla ALLA fält från originalreceptet, inklusive:
-        name, target_og, fermentables (med procent och potential_sg), hops, yeast.
-        Exempel på korrekt formaterat svar:
-        
-        Här är det uppdaterade receptet med de amerikanska humlesorterna:
-        
-        ```json
-        {
-          "name": "Receptnamn",
-          "target_og": 1.045,
-          "fermentables": {
-            "Maltnamn": [65, 1.036]
-          },
-          "hops": [
-            {
-              "name": "Humlenamn",
-              "alpha": 15.0,
-              "time": 60,
-              "ibu_contribution": 25
-            }
-          ],
-          "yeast": {
-            "type": "Jästnamn",
-            "amount": 1
-          }
-        }
-        ```"""
+Placera JSON-objektet i ett kodblock med ```json och ``` framför och efter.
+Ditt svar måste innehålla ALLA fält från originalreceptet."""
         })
     
-    # Generera svar från GPT
-    response = continue_gpt_conversation(messages)
+    # Combine system_messages with user_messages (Updated line)
+    combined_messages = system_messages + user_messages
+    
+    # Generate response from GPT with personality
+    response = continue_gpt_conversation(combined_messages, personality_id)
+    
     return jsonify({"response": response})
 
 @function_a_v2_bp.route('/test-calculations', methods=['POST'])
@@ -642,3 +651,51 @@ def get_inventory_route():
         return jsonify(inventory)
     except Exception as e:
         return jsonify({"error": f"Kunde inte hämta inventory: {str(e)}"}), 500
+
+# Add this new endpoint to your function_a_v2.py file
+
+@function_a_v2_bp.route('/test-personality', methods=['POST'])
+def test_personality():
+    """Test endpoint to compare responses from different personalities"""
+    data = request.json
+    prompt = data.get('prompt', "Föreslå en ölstil för nybörjare och ge några tips.")
+    
+    # Test with all personalities
+    results = {}
+    for personality_id in BREWER_PERSONALITIES.keys():
+        print(f"Testing personality: {personality_id}")
+        response = generate_recipe_with_gpt(prompt, personality_id)
+        results[personality_id] = {
+            "name": BREWER_PERSONALITIES[personality_id]["name"],
+            "response": response
+        }
+    
+    return jsonify(results)
+@function_a_v2_bp.route('/quick-test-personality', methods=['GET'])
+def quick_test_personality():
+    """Simple test endpoint that returns each personality's response to the same question"""
+    test_message = "Vad heter du och vad är din syn på ölbryggning?"
+    
+    results = {}
+    for personality_id in BREWER_PERSONALITIES.keys():
+        messages = [{"role": "user", "content": test_message}]
+        response = continue_gpt_conversation(messages, personality_id)
+        results[personality_id] = {
+            "name": BREWER_PERSONALITIES[personality_id]["name"],
+            "response": response
+        }
+
+
+    return jsonify(results)    
+@function_a_v2_bp.route('/debug-request', methods=['POST'])
+def debug_request():
+    """Debug endpoint to see what the frontend is sending"""
+    data = request.json
+    personality = data.get('personality', 'not provided')
+    
+    # Return all request data for inspection
+    return jsonify({
+        "received_data": data,
+        "personality": personality,
+        "headers": dict(request.headers)
+    })
