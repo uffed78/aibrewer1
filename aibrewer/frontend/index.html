@@ -288,6 +288,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="/function_a_v2/css/ingredient-selection.css">
 </head>
 
 <body>
@@ -327,9 +328,7 @@
     </div>
     
     <div class="sidebar">
-        <button id="getInventoryBtn">Hämta Inventory</button>
-        <button id="suggestStylesBtn">Skicka Inventory till GPT</button>
-        <!-- Removed unused button: generateDraftBtn -->
+        <button id="selectIngredientsBtn" class="btn btn-primary">Välj Ingredienser</button>
         <button id="generateXmlBtn">Generera BeerXML</button>
         <button id="brewerPersonalityBtn">
             <span id="currentBrewerIcon">🏺</span> 
@@ -395,19 +394,14 @@
         // Bas-URL för API-anrop, ändra vid behov
         const baseUrl = 'http://localhost:5001/function_a_v2';
 
-        // Global variabel för att lagra inventory-data
-        let inventoryData = null;
-        
-        // Global variabel för att lagra chatthistoriken
-        let chatHistory = [];
-        
-        // Global variabel för användarinställningar
-        let currentUser = null;
-
         // Globala variabler
-        let currentPersonality = 'traditionalist';
-        let allPersonalities = {};
-        
+        window.lastSelectedIngredients = [];  // Flyttad till window-scope
+        window.inventoryData = null;
+        window.chatHistory = [];
+        window.currentUser = null;
+        window.currentPersonality = 'traditionalist';
+        window.allPersonalities = {};
+
         // Initiera användarhantering och inställningsdialog
         document.addEventListener('DOMContentLoaded', function() {
             initUserSettings();
@@ -766,11 +760,12 @@
 
         // Generera receptutkast (draft) baserat på valt stil och ingredienser
         async function generateDraft(style) {
-            const ingredients = getSelectedIngredients();
+            // Använd lastSelectedIngredients istället för getSelectedIngredients
+            const ingredients = lastSelectedIngredients;
             const profile = "Grainfather G30";
             
-            if (ingredients.length === 0) {
-                alert("Du måste välja minst en ingrediens för att generera ett recept.");
+            if (!ingredients || ingredients.length === 0) {
+                alert("Inga ingredienser valda. Vänligen välj ingredienser först.");
                 return;
             }
             
@@ -1267,7 +1262,48 @@
                 modal.style.display = 'none';
             }
         });
+
+        document.addEventListener('ingredientsSelected', function(event) {
+            const selectedIngredients = event.detail.ingredients;
+            console.log('Ingredients selected:', selectedIngredients);
+            
+            // Your code to handle the ingredients
+        });
+
+        // Gör displayStyleSuggestions tillgänglig globalt
+        window.displayStyleSuggestions = function(responseText) {
+            console.log("Visar GPT:s stilförslag:", responseText);
+
+            const styleSection = document.getElementById('styleSuggestionsSection');
+            styleSection.classList.remove('hidden');
+            const suggestionsDiv = document.getElementById('styleSuggestions');
+            suggestionsDiv.innerHTML = '';
+
+            // Visa hela GPT:s svar så att användaren kan läsa motiveringarna
+            const explanation = document.createElement('p');
+            explanation.innerHTML = `<strong>GPT:s förslag och resonemang:</strong><br>${responseText.replace(/\n/g, "<br>")}`;
+            suggestionsDiv.appendChild(explanation);
+
+            // Försök att extrahera stilnamnen genom att leta efter rader som börjar med en siffra (1. 2. 3.)
+            const styleMatches = responseText.match(/\d+\.\s([^\n]+)/g);
+
+            if (styleMatches) {
+                styleMatches.forEach(match => {
+                    const styleName = match.replace(/^\d+\.\s/, "").trim(); // Ta bort numreringen och behåll namnet
+                    const btn = document.createElement('button');
+                    btn.textContent = styleName;
+                    btn.style.margin = "5px";
+                    btn.addEventListener('click', () => {
+                        generateDraft(styleName);
+                    });
+                    suggestionsDiv.appendChild(btn);
+                });
+            } else {
+                console.warn("Kunde inte extrahera stilnamn automatiskt.");
+            }
+        };
     </script>
-    <script src="js/personality-debug.js"></script>
+    <script src="/function_a_v2/js/personality-debug.js"></script>
+    <script src="/function_a_v2/js/ingredient-selection.js"></script>
 </body>
 </html>

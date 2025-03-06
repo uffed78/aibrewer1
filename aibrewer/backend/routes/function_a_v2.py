@@ -1,6 +1,6 @@
 import io
 import json
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, send_file, send_from_directory
 # Fix imports to use relative paths
 from ..gpt_integration import generate_recipe_with_gpt, continue_gpt_conversation
 from ..equipment_profiles import get_equipment_profile
@@ -13,8 +13,20 @@ from ..recipe_calculations import (
 )
 from ..brewfather_api import get_all_inventory
 from ..brewer_personalities import BREWER_PERSONALITIES
+import os
 
 function_a_v2_bp = Blueprint('function_a_v2', __name__)
+
+# Serve static files
+@function_a_v2_bp.route('/js/<path:filename>')
+def serve_js(filename):
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../frontend'))
+    return send_from_directory(os.path.join(frontend_dir, 'js'), filename)
+
+@function_a_v2_bp.route('/css/<path:filename>')
+def serve_css(filename):
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../frontend'))
+    return send_from_directory(os.path.join(frontend_dir, 'css'), filename)
 
 # Ny endpoint för att hämta alla tillgängliga bryggarpersonligheter
 @function_a_v2_bp.route('/personalities', methods=['GET'])

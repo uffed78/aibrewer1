@@ -13,7 +13,15 @@ from aibrewer.backend.routes.function_c import function_c_bp
 from aibrewer.backend.routes.function_a_v2 import function_a_v2_bp
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Uppdatera CORS-konfigurationen för att tillåta alla ursprung
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Öka serverns timeout och maxstorlek på begäran
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False  # För att förbättra prestanda på JSON-svar
