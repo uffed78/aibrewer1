@@ -17,16 +17,27 @@ import os
 
 function_a_v2_bp = Blueprint('function_a_v2', __name__)
 
-# Serve static files
+# Update static file serving routes for better path handling
 @function_a_v2_bp.route('/js/<path:filename>')
 def serve_js(filename):
-    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../frontend'))
+    # Get absolute path to frontend directory
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../frontend'))
+    print(f"Serving JS file: {filename} from {frontend_dir}/js")
     return send_from_directory(os.path.join(frontend_dir, 'js'), filename)
 
 @function_a_v2_bp.route('/css/<path:filename>')
 def serve_css(filename):
-    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../frontend'))
+    # Get absolute path to frontend directory
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../frontend'))
+    print(f"Serving CSS file: {filename} from {frontend_dir}/css")
     return send_from_directory(os.path.join(frontend_dir, 'css'), filename)
+
+# Serve the main index.html file
+@function_a_v2_bp.route('/')
+def serve_index():
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../frontend'))
+    print(f"Serving index.html from {frontend_dir}")
+    return send_from_directory(frontend_dir, 'index.html')
 
 # Ny endpoint för att hämta alla tillgängliga bryggarpersonligheter
 @function_a_v2_bp.route('/personalities', methods=['GET'])

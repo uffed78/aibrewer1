@@ -12,9 +12,13 @@ from aibrewer.backend.routes.function_b import function_b_bp
 from aibrewer.backend.routes.function_c import function_c_bp
 from aibrewer.backend.routes.function_a_v2 import function_a_v2_bp
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=None)  # Disable default static folder handling
 
-# Uppdatera CORS-konfigurationen för att tillåta alla ursprung
+# Print startup message with paths for debugging
+print(f"Starting AIBrewer app from {os.path.abspath(os.path.dirname(__file__))}")
+print(f"Project root directory: {os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))}")
+
+# Update CORS configuration
 CORS(app, resources={
     r"/*": {
         "origins": "*",
@@ -23,32 +27,37 @@ CORS(app, resources={
     }
 })
 
-# Öka serverns timeout och maxstorlek på begäran
-app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False  # För att förbättra prestanda på JSON-svar
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB maxstorlek för svaret
+# Increase server's timeout and request max size
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB max request size
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable caching for development
 
-# Registrera Blueprints
-
+# Register Blueprints
 app.register_blueprint(frontend_bp)
 app.register_blueprint(function_b_bp, url_prefix='/function_b')
 app.register_blueprint(function_c_bp, url_prefix='/function_c')
 app.register_blueprint(function_a_v2_bp, url_prefix='/function_a_v2')
 
-# Health Check Route
-@app.route('/status', methods=['GET'])
+# Define static file routes at the app level
+@app.route('/<path:filename>')
+def base_static(filename):
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend'))
+    print(f"Serving file: {filename} from {frontend_dir}")
+    return send_from_directory(frontend_dir, filename)
+
+# Health check route
+@app.route('/status')
 def status():
     return {"status": "API is running"}
 
-# Nytt här under
-
+# Root route - serve the main index.html
 @app.route('/')
 def serve_frontend():
-    return send_from_directory('../frontend', 'index.html')
-
-@app.route('/<path:path>')
-def serve_static(path):
-    return send_from_directory('../frontend', path)
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend'))
+    print(f"Serving index.html from {frontend_dir}")
+    return send_from_directory(frontend_dir, 'index.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
-    app.run(host='0.0.0.0', port=port)
+    print(f"Starting Flask app on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=True)

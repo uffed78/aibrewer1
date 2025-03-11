@@ -8,12 +8,15 @@ from .brewer_personalities import get_personality  # Use relative import
 # Ladda miljövariabler från .env
 load_dotenv()
 
-# Initialize the OpenAI client with the API key
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Initialize the OpenAI client with OpenRouter configuration
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+)
 
 def generate_recipe_with_gpt(prompt, personality_id="traditionalist"):
     """
-    Generates a beer recipe using OpenAI GPT API based on the provided prompt.
+    Generates a beer recipe using OpenRouter API based on the provided prompt.
     
     Args:
         prompt (str): The prompt to send to GPT for recipe generation.
@@ -27,9 +30,9 @@ def generate_recipe_with_gpt(prompt, personality_id="traditionalist"):
         personality = get_personality(personality_id)
         system_content = personality["system_prompt"] if personality else "You are a master brewer with extensive experience creating high-quality beer recipes."
         
-        # Use the client-based API approach
+        # Use the client-based API approach with OpenRouter
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="anthropic/claude-3.5-haiku:beta",  # Use OpenRouter's routing to OpenAI models
             messages=[
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": prompt}
@@ -70,9 +73,9 @@ def continue_gpt_conversation(messages, personality_id="traditionalist"):
         
         print(f"DEBUG: First system message: {full_messages[0]['content'][:50]}...")
         
-        # Make the API call
+        # Make the API call through OpenRouter
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="anthropic/claude-3.5-haiku:beta",
             messages=full_messages,
             temperature=0.7,
             max_tokens=1500
@@ -90,7 +93,7 @@ def send_full_inventory_to_gpt(full_inventory):
     """
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="anthropic/claude-3.5-haiku:beta",  # Use OpenRouter's routing to OpenAI models
             messages=[
                 {"role": "system", "content": "Du är en expert på ölbryggning och BeerXML-recept."},
                 {"role": "user", "content": str(full_inventory)}
