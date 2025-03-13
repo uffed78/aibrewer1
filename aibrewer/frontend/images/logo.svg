@@ -1,0 +1,16 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Beer mug base -->
+  <path d="M30 35C30 31.6863 32.6863 29 36 29H76C79.3137 29 82 31.6863 82 35V95C82 98.3137 79.3137 101 76 101H36C32.6863 101 30 98.3137 30 95V35Z" fill="#FFCC80"/>
+  <!-- Beer liquid -->
+  <path d="M34 39C34 37.8954 34.8954 37 36 37H76C77.1046 37 78 37.8954 78 39V95C78 96.1046 77.1046 97 76 97H36C34.8954 97 34 96.1046 34 95V39Z" fill="#E8A95C"/>
+  <!-- Beer foam -->
+  <path d="M34 39C34 37.8954 34.8954 37 36 37H76C77.1046 37 78 37.8954 78 39V45C78 46.1046 77.1046 47 76 47H36C34.8954 47 34 46.1046 34 45V39Z" fill="#FFFFFF"/>
+  <!-- Mug handle -->
+  <path d="M82 45C82 41.6863 84.6863 39 88 39H90C93.3137 39 96 41.6863 96 45V65C96 68.3137 93.3137 71 90 71H88C84.6863 71 82 68.3137 82 65V45Z" fill="#FFCC80"/>
+  <!-- AI circuit pattern -->
+  <path d="M47 59L54 59M54 59L61 59M54 59L54 66M61 59L68 59M68 59L74 59M68 59L68 66M54 66L54 73M54 73L54 80M54 73L61 73M68 66L68 73M68 73L68 80M68 73L61 73M61 73L61 80" stroke="#2F855A" stroke-width="2" stroke-linecap="round"/>
+  <!-- Hop icon -->
+  <circle cx="46" cy="62" r="4" fill="#2F855A"/>
+  <!-- Circular AI symbol -->
+  <circle cx="60" cy="60" r="24" stroke="#2F855A" stroke-width="2" stroke-dasharray="4 2"/>
+</svg>

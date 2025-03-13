@@ -1,0 +1,135 @@
+/* Reset mobile layout */
+body.mobile-layout {
+  overflow-x: hidden;
+}
+
+/* Default desktop-only sidebar */
+.aibrewer-sidebar {
+  display: block;
+  width: 220px;
+  background-color: #f1f1f1;
+  padding: 20px;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Default desktop buttons */
+.aibrewer-sidebar button {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: none;
+  background-color: #4CAF50;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* Mobile Menu Button (Hamburger) */
+.mobile-menu-btn {
+  display: none; /* Hidden on desktop */
+  background: none;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+  z-index: 1000;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+}
+
+.mobile-menu-btn span {
+  display: block;
+  width: 25px;
+  height: 3px;
+  margin: 5px 0;
+  background-color: #333;
+  transition: all 0.3s ease;
+}
+
+/* Mobile Sidebar */
+.mobile-nav {
+  display: none; /* Hidden by default */
+  position: fixed; 
+  width: 250px;
+  height: 100vh;
+  left: -250px; /* Start offscreen */
+  top: 0;
+  background-color: white;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+  transition: transform 0.3s ease;
+  z-index: 999;
+  padding-top: 60px;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.mobile-nav.active {
+  transform: translateX(250px);
+}
+
+/* Mobile overlay */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,0,0,0.5);
+  z-index: 998;
+}
+
+.mobile-overlay.active {
+  display: block;
+}
+
+/* Mobile nav buttons */
+.mobile-nav button {
+  display: block;
+  width: 100%;
+  margin-bottom: 15px;
+  padding: 12px 15px;
+  border: none;
+  background-color: #4CAF50;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+  text-align: left;
+  border-radius: 5px;
+}
+
+/* Hamburger animation */
+.mobile-menu-btn.active span:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 6px);
+}
+
+.mobile-menu-btn.active span:nth-child(2) {
+  opacity: 0;
+}
+
+.mobile-menu-btn.active span:nth-child(3) {
+  transform: rotate(-45deg) translate(5px, -6px);
+}
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+  .aibrewer-sidebar {
+    display: none !important; /* Force hide desktop sidebar */
+  }
+  
+  .mobile-menu-btn {
+    display: block !important; /* Force show mobile menu button */
+  }
+  
+  .mobile-nav {
+    display: block !important; /* Show nav container but keep it offscreen */
+  }
+  
+  /* Adjust main content area */
+  .main-content {
+    width: 100% !important;
+    margin-left: 0 !important;
+    padding: 15px !important;
+  }
+}

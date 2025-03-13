@@ -8,6 +8,7 @@
     <!-- Fix the CSS paths - use relative paths instead of '/function_a_v2/css/' -->
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/ingredient-selection.css">
+    <link rel="stylesheet" href="css/simple-mobile.css">
     <!-- Add inline styles for critical CSS in case external styles fail to load -->
     <style>
         /* Basic fallback styles */
@@ -19,9 +20,73 @@
 </head>
 
 <body>
-    <!-- Lägg till en inställningsknapp i övre högra hörnet -->
-    <button id="settingsBtn">⚙️ Inställningar</button>
-    
+    <!-- App Header -->
+    <header class="app-header">
+        <div class="header-brand">
+            <span class="header-title">AIBrewer</span>
+        </div>
+        <div class="header-actions">
+            <button id="settingsBtn" class="btn btn-icon btn-ghost">⚙️</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <button id="selectIngredientsBtn" class="nav-btn">
+                    <span class="nav-icon">🧪</span>
+                    Välj Ingredienser
+                </button>
+                <button id="generateXmlBtn" class="nav-btn">
+                    <span class="nav-icon">📄</span>
+                    Generera BeerXML
+                </button>
+                <button id="brewerPersonalityBtn" class="nav-btn">
+                    <span id="currentBrewerIcon" class="nav-icon">🏺</span>
+                    <span id="currentBrewerName">Harald Traditionell</span>
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Inventory Section -->
+            <section id="inventorySection">
+                <h2>Inventory</h2>
+                <div id="inventoryDisplay">Klicka på "Hämta Inventory" för att ladda ingredienser.</div>
+            </section>
+
+            <!-- Stilförslag Section -->
+            <section id="styleSuggestionsSection" class="hidden">
+                <h2>Stilförslag</h2>
+                <div id="styleSuggestions"></div>
+                <div>
+                    <label for="customStyle">Eller ange eget förslag:</label>
+                    <input type="text" id="customStyle" placeholder="T.ex. Schwarzbier">
+                    <button id="customStyleBtn">Skicka eget förslag</button>
+                </div>
+            </section>
+
+            <!-- Receptutkast Section -->
+            <section id="draftSection" class="hidden">
+                <h2>Receptutkast</h2>
+                <div id="draftDisplay"></div>
+            </section>
+
+            <!-- Chat Section - Now always visible -->
+            <section id="chatContainer">
+                <h2>Diskutera med GPT</h2>
+                <div id="chatDisplay"></div>
+                <div id="chatInputContainer">
+                    <input type="text" id="chatInput" placeholder="Skriv en fråga om receptet...">
+                    <button id="sendChatBtn">Skicka</button>
+                </div>
+            </section>
+        </div>
+    </div>
+
     <!-- Inställningsdialog -->
     <div id="settingsModal" class="modal">
         <div class="modal-content">
@@ -53,15 +118,6 @@
             </div>
         </div>
     </div>
-    
-    <div class="sidebar">
-        <button id="selectIngredientsBtn" class="btn btn-primary">Välj Ingredienser</button>
-        <button id="generateXmlBtn">Generera BeerXML</button>
-        <button id="brewerPersonalityBtn">
-            <span id="currentBrewerIcon">🏺</span> 
-            <span id="currentBrewerName">Harald Traditionell</span>
-        </button>
-    </div>
 
     <!-- Personlighetsmodal -->
     <div id="personalityModal" class="personality-modal">
@@ -82,41 +138,6 @@
         <span id="badgeName">Harald Traditionell</span>
     </div>
 
-    <div class="main-content">
-        <!-- Inventory Section -->
-        <section id="inventorySection">
-            <h2>Inventory</h2>
-            <div id="inventoryDisplay">Klicka på "Hämta Inventory" för att ladda ingredienser.</div>
-        </section>
-
-        <!-- Stilförslag Section -->
-        <section id="styleSuggestionsSection" class="hidden">
-            <h2>Stilförslag</h2>
-            <div id="styleSuggestions"></div>
-            <div>
-                <label for="customStyle">Eller ange eget förslag:</label>
-                <input type="text" id="customStyle" placeholder="T.ex. Schwarzbier">
-                <button id="customStyleBtn">Skicka eget förslag</button>
-            </div>
-        </section>
-
-        <!-- Receptutkast Section -->
-        <section id="draftSection" class="hidden">
-            <h2>Receptutkast</h2>
-            <div id="draftDisplay"></div>
-        </section>
-
-        <!-- Chat Section - Now always visible -->
-        <section id="chatContainer">
-            <h2>Diskutera med GPT</h2>
-            <div id="chatDisplay"></div>
-            <div id="chatInputContainer">
-                <input type="text" id="chatInput" placeholder="Skriv en fråga om receptet...">
-                <button id="sendChatBtn">Skicka</button>
-            </div>
-        </section>
-    </div>
-
     <!-- Fix JavaScript paths - use relative paths instead of '/function_a_v2/js/' -->
     <script src="js/main.js"></script>
     <script src="js/api-client.js"></script>
@@ -126,6 +147,7 @@
     <script src="js/personality-manager.js"></script>
     <script src="js/chat-system.js"></script>
     <script src="js/ingredient-selection.js"></script>
+    <script src="js/simple-mobile.js"></script>
     
     <!-- Add error tracking script -->
     <script>

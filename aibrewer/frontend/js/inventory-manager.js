@@ -234,7 +234,11 @@ const InventoryManager = (() => {
     function handleIngredientSelection(event) {
         const ingredients = event.detail.ingredients;
         APP_STATE.lastSelectedIngredients = ingredients;
-        console.log('📦 Ingredients selected:', ingredients);
+        
+        // Remove the inventory section completely from DOM
+        if (inventorySection) {
+            inventorySection.remove();
+        }
         
         // Request style suggestions
         requestStyleSuggestions(ingredients);

@@ -409,6 +409,19 @@ const IngredientSelector = (() => {
             return;
         }
         
+        // Add Select/Deselect All button
+        const selectAllContainer = document.createElement('div');
+        selectAllContainer.className = 'select-all-container';
+        
+        const selectAllBtn = document.createElement('button');
+        selectAllBtn.className = 'btn btn-secondary select-all-btn';
+        selectAllBtn.innerHTML = 'Markera/Avmarkera alla';
+        selectAllBtn.onclick = () => toggleAllInCategory(category);
+        
+        selectAllContainer.appendChild(selectAllBtn);
+        container.appendChild(selectAllContainer);
+        
+        // Continue with existing ingredient rendering...
         allIngredients[category].forEach(item => {
             const isSelected = selectedIngredients.some(
                 selected => selected.name === item.name && selected.category === category
@@ -452,6 +465,36 @@ const IngredientSelector = (() => {
             
             container.appendChild(card);
         });
+    }
+
+    function toggleAllInCategory(category) {
+        const cards = modal.querySelectorAll(`.ingredient-card[data-category="${category}"]`);
+        const allSelected = Array.from(cards).every(card => card.classList.contains('selected'));
+        
+        cards.forEach(card => {
+            if (allSelected) {
+                // Deselect all
+                card.classList.remove('selected');
+                const existingIndex = selectedIngredients.findIndex(
+                    item => item.name === card.dataset.name && item.category === category
+                );
+                if (existingIndex >= 0) {
+                    selectedIngredients.splice(existingIndex, 1);
+                }
+            } else {
+                // Select all
+                card.classList.add('selected');
+                if (!selectedIngredients.some(item => item.name === card.dataset.name && item.category === category)) {
+                    selectedIngredients.push({
+                        name: card.dataset.name,
+                        category: category,
+                        id: card.dataset.id
+                    });
+                }
+            }
+        });
+        
+        updateSelectionCounter();
     }
     
     // Get icon for category
