@@ -58,6 +58,7 @@ def serve_frontend():
     return send_from_directory(frontend_dir, 'index.html')
 
 if __name__ == '__main__':
+    # Använd PORT miljövariabeln som Render.com tillhandahåller
     port = int(os.environ.get('PORT', 5001))
     print(f"Starting Flask app on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port)
