@@ -26,7 +26,12 @@
 
 /* Fixa visning av app-header */
 .app-header {
-  display: none !important; /* Dölj app-header i vanlig desktop-vy */
+  display: flex !important; /* Make sure header is always visible */
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+  height: 60px;
+  background: white;
 }
 
 /* Mobilanpassning med media query */
@@ -101,11 +106,12 @@
     right: 0 !important;
     height: 56px !important;
     background: white !important;
-    z-index: 1600 !important;
+    z-index: 1700 !important;
     border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
     align-items: center !important;
     justify-content: center !important;
     padding: 0 20px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
   
   /* Dölj bilden och frågetecknet */
@@ -128,6 +134,11 @@
   /* Overlay börjar under headern */
   .mobile-overlay {
     top: 56px !important;
+  }
+
+  /* Adjust content position when header is fixed */
+  .app-container {
+    margin-top: 60px;
   }
 }
 
@@ -159,4 +170,21 @@
     flex: 1 !important; 
     margin-left: 0 !important; /* No margin needed when using flex */
   }
+}
+
+/* Fix for settings button visibility */
+.header-actions {
+  display: flex;
+  align-items: center;
+}
+
+#settingsBtn {
+  display: block !important;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 24px;
+  padding: 5px;
+  margin-left: 10px;
+  z-index: 1800; /* Ensure it's above other elements */
 }

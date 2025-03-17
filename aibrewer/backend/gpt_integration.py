@@ -1,6 +1,5 @@
 import os
 import json
-from openai import OpenAI
 from os import environ
 from dotenv import load_dotenv
 from .brewer_personalities import get_personality  # Use relative import
@@ -8,41 +7,65 @@ from .brewer_personalities import get_personality  # Use relative import
 # Ladda miljövariabler från .env
 load_dotenv()
 
-# Initialize the OpenAI client with OpenRouter configuration
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+# Ändrad OpenAI klientinitialisering för bättre kompatibilitet
+try:
+    # Försök först med nyare API-stil
+    from openai import OpenAI
+    
+    # Skapa klienten utan 'proxies' argument som kan orsaka fel på vissa plattformar
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+    )
+    USING_NEW_API = True
+except (ImportError, TypeError):
+    try:
+        # Fallback till äldre OpenAI API stil
+        import openai
+        openai.api_base = "https://openrouter.ai/api/v1"
+        openai.api_key = os.getenv("OPENROUTER_API_KEY")
+        USING_NEW_API = False
+        print("Using legacy OpenAI API style")
+    except ImportError:
+        # Om inget fungerar, visa ett tydligt felmeddelande
+        print("ERROR: Could not initialize OpenAI client. Please install openai package with: pip install openai>=1.0.0")
+        raise
 
 def generate_recipe_with_gpt(prompt, personality_id="traditionalist"):
     """
     Generates a beer recipe using OpenRouter API based on the provided prompt.
-    
-    Args:
-        prompt (str): The prompt to send to GPT for recipe generation.
-        personality_id (str): Optional personality to use for the generation.
-        
-    Returns:
-        str: The generated recipe as a string or JSON object.
+    Compatible with both new and old OpenAI API styles.
     """
     try:
         # Get personality profile if provided
         personality = get_personality(personality_id)
         system_content = personality["system_prompt"] if personality else "You are a master brewer with extensive experience creating high-quality beer recipes."
         
-        # Use the client-based API approach with OpenRouter
-        response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku:beta",  # Use OpenRouter's routing to OpenAI models
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1500
-        )
-        
-        # Extract the content from the response
-        recipe_text = response.choices[0].message.content
+        # Anpassad för olika API-versioner
+        if USING_NEW_API:
+            # Använd ny API-stil
+            response = client.chat.completions.create(
+                model="anthropic/claude-3.5-haiku:beta",
+                messages=[
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1500
+            )
+            recipe_text = response.choices[0].message.content
+        else:
+            # Använd äldre API-stil
+            response = openai.ChatCompletion.create(
+                model="anthropic/claude-3.5-haiku:beta",
+                messages=[
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1500
+            )
+            recipe_text = response['choices'][0]['message']['content']
         
         # Try to parse as JSON if possible
         try:
@@ -58,6 +81,7 @@ def generate_recipe_with_gpt(prompt, personality_id="traditionalist"):
 def continue_gpt_conversation(messages, personality_id="traditionalist"):
     """
     Continue a conversation with GPT based on previous messages.
+    Compatible with both new and old OpenAI API styles.
     """
     try:
         # Get personality with debug info
@@ -73,19 +97,29 @@ def continue_gpt_conversation(messages, personality_id="traditionalist"):
         
         print(f"DEBUG: First system message: {full_messages[0]['content'][:50]}...")
         
-        # Make the API call through OpenRouter
-        response = client.chat.completions.create(
-            model="anthropic/claude-3.5-haiku:beta",
-            messages=full_messages,
-            temperature=0.7,
-            max_tokens=1500
-        )
-        
-        return response.choices[0].message.content
+        # Anpassad för olika API-versioner
+        if USING_NEW_API:
+            # Använd ny API-stil
+            response = client.chat.completions.create(
+                model="anthropic/claude-3.5-haiku:beta",
+                messages=full_messages,
+                temperature=0.7,
+                max_tokens=1500
+            )
+            return response.choices[0].message.content
+        else:
+            # Använd äldre API-stil
+            response = openai.ChatCompletion.create(
+                model="anthropic/claude-3.5-haiku:beta",
+                messages=full_messages,
+                temperature=0.7,
+                max_tokens=1500
+            )
+            return response['choices'][0]['message']['content']
             
     except Exception as e:
         print(f"Error continuing conversation with GPT: {str(e)}")
-        return {"error": str(e)}
+        return f"Ett fel uppstod när jag försökte generera ett svar: {str(e)}"
 
 def send_full_inventory_to_gpt(full_inventory):
     """

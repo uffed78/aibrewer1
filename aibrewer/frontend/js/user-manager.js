@@ -1,239 +1,295 @@
 /**
  * User Manager Module
- * Handles user profiles, authentication and Brewfather API integration
+ * Handles user authentication and settings
  */
 const UserManager = (() => {
     // Private variables
-    let settingsForm;
-    let settingsModal;
     let settingsBtn;
+    let settingsModal;
+    let closeBtn;
+    let settingsForm;
     let userProfilesList;
+    let currentUserDisplay;
+    let currentUser = null;
+    
+    // Local storage keys
+    const USERS_KEY = 'aibrewer_users';
+    const CURRENT_USER_KEY = 'aibrewer_current_user';
     
     // Initialize module
     function init() {
-        console.log('🔑 Initializing User Manager...');
+        console.log('👤 Initializing User Manager...');
         
         // Cache DOM elements
-        settingsForm = document.getElementById('settingsForm');
-        settingsModal = document.getElementById('settingsModal');
         settingsBtn = document.getElementById('settingsBtn');
+        settingsModal = document.getElementById('settingsModal');
+        closeBtn = settingsModal ? settingsModal.querySelector('.close') : null;
+        settingsForm = document.getElementById('settingsForm');
         userProfilesList = document.getElementById('userProfilesList');
+        currentUserDisplay = document.getElementById('currentUserDisplay');
         
         // Setup event listeners
         setupEventListeners();
         
-        // Load saved profiles
-        loadSavedProfiles();
+        // Load current user
+        loadCurrentUser();
         
-        console.log('🔑 User Manager initialized');
+        // Display users list
+        displayUsersList();
+        
+        // Update current user display
+        updateCurrentUserDisplay();
+        
+        console.log('👤 User Manager initialized');
     }
     
-    // Set up event listeners for user management
+    // Set up event listeners
     function setupEventListeners() {
-        // Settings button
+        // Settings button click
         if (settingsBtn) {
-            settingsBtn.addEventListener('click', () => {
-                settingsModal.style.display = 'block';
-            });
+            settingsBtn.addEventListener('click', showSettings);
+            console.log('👤 Settings button listener added');
+        } else {
+            console.warn('👤 Settings button not found');
         }
         
-        // Settings form submission
+        // Close button click
+        if (closeBtn) {
+            closeBtn.addEventListener('click', hideSettings);
+        }
+        
+        // Settings form submit
         if (settingsForm) {
-            settingsForm.addEventListener('submit', handleSettingsSubmit);
-        }
-        
-        // Modal close button
-        const closeButton = settingsModal ? settingsModal.querySelector('.close') : null;
-        if (closeButton) {
-            closeButton.addEventListener('click', () => {
-                settingsModal.style.display = 'none';
-            });
+            settingsForm.addEventListener('submit', saveSettings);
         }
         
         // Close modal when clicking outside
         window.addEventListener('click', function(event) {
             if (event.target === settingsModal) {
-                settingsModal.style.display = 'none';
+                hideSettings();
             }
         });
     }
     
-    // Handle settings form submission
-    function handleSettingsSubmit(e) {
-        e.preventDefault();
+    // Show settings modal
+    function showSettings() {
+        console.log('👤 Showing settings modal');
+        if (settingsModal) {
+            settingsModal.style.display = 'block';
+            
+            // Pre-fill form with current user data if available
+            if (currentUser) {
+                const usernameInput = document.getElementById('username');
+                const apiIdInput = document.getElementById('apiId');
+                const apiKeyInput = document.getElementById('apiKey');
+                
+                if (usernameInput) usernameInput.value = currentUser.username || '';
+                if (apiIdInput) apiIdInput.value = currentUser.apiId || '';
+                if (apiKeyInput) apiKeyInput.value = currentUser.apiKey || '';
+            }
+        }
+    }
+    
+    // Hide settings modal
+    function hideSettings() {
+        if (settingsModal) {
+            settingsModal.style.display = 'none';
+        }
+    }
+    
+    // Save settings from form
+    function saveSettings(event) {
+        event.preventDefault();
         
         const username = document.getElementById('username').value.trim();
         const apiId = document.getElementById('apiId').value.trim();
         const apiKey = document.getElementById('apiKey').value.trim();
         
-        // Retrieve saved profiles
-        let profiles = JSON.parse(localStorage.getItem('brewfatherProfiles')) || [];
-        
-        // Check if the user already exists
-        const existingIndex = profiles.findIndex(p => p.username === username);
-        
-        if (existingIndex >= 0) {
-            profiles[existingIndex] = { username, apiId, apiKey };
-        } else {
-            profiles.push({ username, apiId, apiKey });
-        }
-        
-        // Save to localStorage
-        localStorage.setItem('brewfatherProfiles', JSON.stringify(profiles));
-        localStorage.setItem('lastUsedProfile', username);
-        
-        // Update current user
-        APP_STATE.currentUser = { username, apiId, apiKey };
-        
-        // Update UI
-        updateUserProfilesList(profiles);
-        updateCurrentUserDisplay();
-        
-        // Close modal
-        settingsModal.style.display = 'none';
-        
-        alert(`Inställningar sparade för ${username}`);
-    }
-    
-    // Load saved profiles from localStorage
-    function loadSavedProfiles() {
-        let savedProfiles = JSON.parse(localStorage.getItem('brewfatherProfiles')) || [];
-        let lastUsedProfile = localStorage.getItem('lastUsedProfile');
-        
-        if (lastUsedProfile) {
-            APP_STATE.currentUser = savedProfiles.find(p => p.username === lastUsedProfile);
-        }
-        
-        // Display current user if any
-        if (APP_STATE.currentUser) {
-            document.getElementById('username').value = APP_STATE.currentUser.username;
-            document.getElementById('apiId').value = APP_STATE.currentUser.apiId;
-            document.getElementById('apiKey').value = APP_STATE.currentUser.apiKey;
-            updateCurrentUserDisplay();
-        }
-        
-        // Display all saved profiles
-        updateUserProfilesList(savedProfiles);
-    }
-    
-    // Update the list of user profiles in UI
-    function updateUserProfilesList(profiles) {
-        if (!userProfilesList) return;
-        
-        userProfilesList.innerHTML = '';
-        
-        if (profiles.length === 0) {
-            userProfilesList.innerHTML = '<p>Inga profiler sparade ännu.</p>';
+        if (!username || !apiId || !apiKey) {
+            alert('Alla fält måste fyllas i.');
             return;
         }
         
-        profiles.forEach(profile => {
-            const profileDiv = document.createElement('div');
-            profileDiv.className = 'user-profile';
-            
-            profileDiv.innerHTML = `
-                <span>${profile.username}</span>
-                <button class="use-profile" data-username="${profile.username}">Använd</button>
-                <button class="delete-profile" data-username="${profile.username}">Ta bort</button>
-            `;
-            
-            userProfilesList.appendChild(profileDiv);
-        });
+        // Create user object
+        const user = {
+            username,
+            apiId,
+            apiKey,
+            timestamp: new Date().toISOString()
+        };
         
-        // Add event handlers to the buttons
-        document.querySelectorAll('.use-profile').forEach(button => {
-            button.addEventListener('click', function() {
-                const username = this.getAttribute('data-username');
-                selectUserProfile(username, profiles);
-            });
-        });
+        // Save user
+        saveUser(user);
         
-        document.querySelectorAll('.delete-profile').forEach(button => {
-            button.addEventListener('click', function() {
-                const username = this.getAttribute('data-username');
-                deleteUserProfile(username, profiles);
-            });
-        });
+        // Set as current user
+        setCurrentUser(user);
+        
+        // Update display
+        updateCurrentUserDisplay();
+        displayUsersList();
+        
+        // Close modal
+        hideSettings();
+        
+        // Show success message
+        alert(`Profil sparad för ${username}`);
     }
     
-    // Select a user profile
-    function selectUserProfile(username, profiles) {
-        const profile = profiles.find(p => p.username === username);
+    // Save user to local storage
+    function saveUser(user) {
+        const users = getUsers();
         
-        if (profile) {
-            document.getElementById('username').value = profile.username;
-            document.getElementById('apiId').value = profile.apiId;
-            document.getElementById('apiKey').value = profile.apiKey;
-            
-            // Update current user and save to localStorage
-            APP_STATE.currentUser = profile;
-            localStorage.setItem('lastUsedProfile', username);
-            updateCurrentUserDisplay();
+        // Check if user already exists
+        const existingIndex = users.findIndex(u => u.username === user.username);
+        if (existingIndex >= 0) {
+            // Update existing user
+            users[existingIndex] = user;
+        } else {
+            // Add new user
+            users.push(user);
+        }
+        
+        // Save to local storage
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+    
+    // Get all users from local storage
+    function getUsers() {
+        const usersString = localStorage.getItem(USERS_KEY);
+        return usersString ? JSON.parse(usersString) : [];
+    }
+    
+    // Set current user
+    function setCurrentUser(user) {
+        currentUser = user;
+        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+    }
+    
+    // Load current user from local storage
+    function loadCurrentUser() {
+        const userString = localStorage.getItem(CURRENT_USER_KEY);
+        if (userString) {
+            try {
+                currentUser = JSON.parse(userString);
+            } catch (e) {
+                console.error('Error parsing current user:', e);
+                currentUser = null;
+            }
         }
     }
     
-    // Delete a user profile
-    function deleteUserProfile(username, profiles) {
-        if (confirm(`Är du säker på att du vill ta bort profilen för ${username}?`)) {
-            const updatedProfiles = profiles.filter(p => p.username !== username);
-            localStorage.setItem('brewfatherProfiles', JSON.stringify(updatedProfiles));
+    // Display users list
+    function displayUsersList() {
+        if (!userProfilesList) return;
+        
+        const users = getUsers();
+        
+        userProfilesList.innerHTML = '';
+        
+        if (users.length === 0) {
+            userProfilesList.innerHTML = '<p>Inga sparade profiler.</p>';
+            return;
+        }
+        
+        users.forEach(user => {
+            const userDiv = document.createElement('div');
+            userDiv.className = 'user-profile';
             
-            // If the deleted profile was the active one, reset currentUser
-            if (APP_STATE.currentUser && APP_STATE.currentUser.username === username) {
-                APP_STATE.currentUser = null;
-                localStorage.removeItem('lastUsedProfile');
-                document.getElementById('username').value = '';
-                document.getElementById('apiId').value = '';
-                document.getElementById('apiKey').value = '';
-                updateCurrentUserDisplay();
+            const isActive = currentUser && currentUser.username === user.username;
+            if (isActive) {
+                userDiv.classList.add('active');
             }
             
-            updateUserProfilesList(updatedProfiles);
+            userDiv.innerHTML = `
+                <div class="user-profile-name">${user.username}</div>
+                <div class="user-profile-actions">
+                    <button class="select-btn">${isActive ? 'Aktiv' : 'Välj'}</button>
+                    <button class="delete-btn">Ta bort</button>
+                </div>
+            `;
+            
+            // Add select event
+            const selectBtn = userDiv.querySelector('.select-btn');
+            selectBtn.addEventListener('click', () => {
+                setCurrentUser(user);
+                updateCurrentUserDisplay();
+                displayUsersList();
+            });
+            
+            // Add delete event
+            const deleteBtn = userDiv.querySelector('.delete-btn');
+            deleteBtn.addEventListener('click', () => {
+                if (confirm(`Är du säker på att du vill ta bort profilen för ${user.username}?`)) {
+                    deleteUser(user.username);
+                    displayUsersList();
+                    updateCurrentUserDisplay();
+                }
+            });
+            
+            userProfilesList.appendChild(userDiv);
+        });
+    }
+    
+    // Delete user
+    function deleteUser(username) {
+        let users = getUsers();
+        users = users.filter(u => u.username !== username);
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+        
+        // Check if current user is deleted
+        if (currentUser && currentUser.username === username) {
+            currentUser = users.length > 0 ? users[0] : null;
+            if (currentUser) {
+                localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUser));
+            } else {
+                localStorage.removeItem(CURRENT_USER_KEY);
+            }
         }
     }
     
-    // Update the display of the current user
+    // Update current user display
     function updateCurrentUserDisplay() {
-        const displayElement = document.getElementById('currentUserDisplay');
-        if (!displayElement) return;
+        if (!currentUserDisplay) return;
         
-        if (APP_STATE.currentUser) {
-            displayElement.innerHTML = `<div class="current-user">Inloggad som: <strong>${APP_STATE.currentUser.username}</strong></div>`;
+        if (currentUser) {
+            currentUserDisplay.innerHTML = `
+                <div class="current-user-info">
+                    <p><strong>Aktiv profil:</strong> ${currentUser.username}</p>
+                    <p><small>API ID: ${currentUser.apiId}</small></p>
+                </div>
+            `;
         } else {
-            displayElement.innerHTML = '<div class="current-user">Ingen användare vald</div>';
+            currentUserDisplay.innerHTML = '<p>Ingen aktiv profil vald.</p>';
         }
     }
     
     // Check if user is authenticated
     function isAuthenticated() {
-        return !!APP_STATE.currentUser;
+        return !!currentUser && !!currentUser.apiId && !!currentUser.apiKey;
     }
     
-    // Get user API credentials
+    // Get API credentials
     function getApiCredentials() {
         if (!isAuthenticated()) {
             return null;
         }
         
         return {
-            apiId: APP_STATE.currentUser.apiId,
-            apiKey: APP_STATE.currentUser.apiKey
+            apiId: currentUser.apiId,
+            apiKey: currentUser.apiKey
         };
-    }
-    
-    // Show settings modal
-    function showSettings() {
-        if (settingsModal) {
-            settingsModal.style.display = 'block';
-        }
     }
     
     // Public API
     return {
         init,
+        showSettings,
+        hideSettings,
         isAuthenticated,
         getApiCredentials,
-        showSettings,
-        updateCurrentUserDisplay
+        setCurrentUser
     };
 })();
+
+// Initialize the module when DOM is ready
+document.addEventListener('DOMContentLoaded', UserManager.init);
