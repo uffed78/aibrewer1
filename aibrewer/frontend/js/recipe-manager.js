@@ -173,9 +173,7 @@ const RecipeManager = (() => {
                     return `<li><strong>${name}</strong> (${percent}%) - Färg: ${metadata.srm_color ? metadata.srm_color.toFixed(1) : "?"} SRM - Leverantör: ${metadata.supplier || "Okänd"}</li>`;
                 }).join('')}</ul>
             <h3>Humle</h3>
-            <ul>${(draft.hops || []).map(hop =>
-                    `<li><strong>${hop.name}</strong> - ${hop.alpha}% alpha - ${hop.ibu_contribution} IBU - ${hop.time} min koktid</li>`
-                ).join('')}</ul>
+            <ul>${(draft.hops || []).map(hop => `<li>${formatHopDisplay(hop)}</li>`).join('')}</ul>
             <h3>Jäst</h3>
             <p><strong>${draft.yeast?.type}</strong> - ${draft.yeast?.amount} paket</p>
             
@@ -346,6 +344,29 @@ const RecipeManager = (() => {
         } catch (error) {
             console.error("❌ Error parsing draft as JSON:", error);
             return null;
+        }
+    }
+    
+    /**
+     * Formaterar visningen av humle
+     */
+    function formatHopDisplay(hop) {
+        if (!hop) return '';
+        
+        // Grunddata
+        const name = hop.name || 'Okänd humle';
+        const alpha = hop.alpha ? `${hop.alpha}% alpha` : '';
+        const time = hop.time || 0;
+        
+        // För torrhumle (time = 0), visa g/L istället för IBU
+        if (time === 0) {
+            // För torrhumle, använd dry_hop_rate som direkt kommer från backend
+            const dryHopRate = hop.dry_hop_rate !== undefined ? `${hop.dry_hop_rate} g/L` : '';
+            return `<strong>${name}</strong> - ${alpha} - ${dryHopRate} - Torrhumle`;
+        } else {
+            // För kokhumle, visa IBU som tidigare
+            const ibu = hop.ibu_contribution !== undefined ? `${hop.ibu_contribution} IBU` : '';
+            return `<strong>${name}</strong> - ${alpha} - ${ibu} - ${time} min koktid`;
         }
     }
     

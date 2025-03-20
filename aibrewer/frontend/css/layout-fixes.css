@@ -1,0 +1,63 @@
+/* Layout fixes - Dölj visuella element men behåll funktionalitet */
+
+/* Gör inventory-sektionen osynlig men behåll dess DOM-position */
+#inventorySection {
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    position: absolute;  /* Ta ur flödet men behåll på sidan */
+}
+
+/* Hide any display of selected ingredients */
+.selected-ingredients-container,
+#selectedIngredientsDisplay,
+.ingredient-selection-summary,
+#ingredientSelectionSummary,
+#styleSuggestionsSection > p,
+#styleSuggestionsSection > div:first-of-type:not(#styleSuggestions) {
+    display: none !important;
+}
+
+/* Hide any text that describes the selected ingredients */
+[id*="ingredient"][id*="display"]:not(#ingredientGroup),
+[id*="ingredient"][id*="list"]:not(#ingredientGroup),
+[class*="ingredient"][class*="display"]:not(.ingredient-card):not(.ingredient-group),
+[class*="ingredient"][class*="list"]:not(.ingredient-card):not(.ingredient-group) {
+    display: none !important;
+}
+
+/* Fix any possible margin/padding issues that might occur from hiding elements */
+.main-content {
+    padding-top: 20px;
+}
+
+/* Ensure the style suggestions section appears properly when visible */
+#styleSuggestionsSection {
+    margin-top: 0;
+}
+
+/* Clean up any excess space at the top of the style suggestions section */
+#styleSuggestionsSection > *:first-child {
+    margin-top: 0;
+}
+
+/* Säkerställ att andra sektioner visas korrekt */
+#styleSuggestionsSection, #draftSection, #chatContainer {
+    margin-top: 0;
+}
+
+/* I mobilvy, se till att knapparna fungerar */
+@media (max-width: 768px) {
+    .sidebar button {
+        pointer-events: auto !important;  /* Säkerställ att knappar kan klickas */
+    }
+}
+
+/* In desktop view, ensure the content flows properly */
+@media (min-width: 769px) {
+    .main-content > section:first-of-type {
+        margin-top: 0;
+    }
+}
